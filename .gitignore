@@ -8,6 +8,7 @@ config.*.json
 config.user.bak
 pm2.json
 pre.sh
+index.js
 
 /bak
 /config
