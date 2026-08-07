@@ -557,7 +557,7 @@
       scores_by_win = _.sortBy(scores_by_lose, function(score) {
         return score[1].win;
       }).reverse(); // 然后胜场由低到高，再逆转，就是先排胜场再排败场
-      scores = _.first(scores_by_win, 10);
+      scores = _.first(scores_by_win, settings.modules.random_duel.post_match_scores_limit);
       //log.info scores
       request.post({
         url: settings.modules.random_duel.post_match_scores,

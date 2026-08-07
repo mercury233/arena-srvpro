@@ -75,6 +75,7 @@
       "no_rematch_check": false,
       "record_match_scores": false,
       "post_match_scores": false,
+      "post_match_scores_limit": 10,
       "post_match_accesskey": "123456",
       "blank_pass_modes": {
         "S": true,

@@ -390,7 +390,7 @@ if settings.modules.random_duel.record_match_scores and settings.modules.random_
     scores_pair = _.pairs ROOM_players_scores
     scores_by_lose = _.sortBy(scores_pair, (score)-> return score[1].lose).reverse() # 败场由高到低
     scores_by_win = _.sortBy(scores_by_lose, (score)-> return score[1].win).reverse() # 然后胜场由低到高，再逆转，就是先排胜场再排败场
-    scores = _.first(scores_by_win, 10)
+    scores = _.first(scores_by_win, settings.modules.random_duel.post_match_scores_limit)
     #log.info scores
     request.post { url : settings.modules.random_duel.post_match_scores , form : {
       accesskey: settings.modules.random_duel.post_match_accesskey,
