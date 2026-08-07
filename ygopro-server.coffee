@@ -1414,6 +1414,9 @@ ygopro.ctos_follow 'HS_KICK', true, (buffer, info, client, server, datas)->
         CLIENT_kick(client)
         return true
       ygopro.stoc_send_chat_to_room(room, "#{player.name} ${kicked_by_player}", ygopro.constants.COLORS.RED)
+      if client.is_host and room.duel_stage == ygopro.constants.DUEL_STAGE.BEGIN and player.server
+        # YGOPro closes the target socket after handling HS_KICK; this is not a room server failure.
+        player.server.system_kicked = true
   return false
 
 ygopro.stoc_follow 'TYPE_CHANGE', true, (buffer, info, client, server, datas)->
