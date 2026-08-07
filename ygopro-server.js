@@ -639,16 +639,16 @@
         bannedplayer.need_tip = true;
       }
     }
-    max_player = type === 'T' ? 4 : 2;
     playerbanned = bannedplayer && bannedplayer.count > 3 && moment_now < bannedplayer.time;
     result = _.find(ROOM_all, function(room) {
-      return room && room.random_type !== '' && !room.disconnector && room.duel_stage === ygopro.constants.DUEL_STAGE.BEGIN && !room.windbot && ((type === '' && (room.random_type === settings.modules.random_duel.default_type || settings.modules.random_duel.blank_pass_modes[room.random_type])) || room.random_type === type) && room.get_playing_player().length < max_player && (settings.modules.random_duel.no_rematch_check || room.get_host() === null || room.get_host().ip !== ROOM_players_oppentlist[player_ip]) && (playerbanned === room.deprecated || type === 'T');
+      return room && room.random_type !== '' && !room.disconnector && room.duel_stage === ygopro.constants.DUEL_STAGE.BEGIN && !room.windbot && ((type === '' && (room.random_type === settings.modules.random_duel.default_type || settings.modules.random_duel.blank_pass_modes[room.random_type])) || room.random_type === type) && room.get_playing_player().length < room.max_player && (settings.modules.random_duel.no_rematch_check || room.get_host() === null || room.get_host().ip !== ROOM_players_oppentlist[player_ip]) && (playerbanned === room.deprecated || type === 'T');
     });
     if (result) {
       result.welcome = '${random_duel_enter_room_waiting}';
     //log.info 'found room', player_name
     } else if (memory_usage < 90 && !(settings.modules.max_rooms_count && rooms_count >= settings.modules.max_rooms_count)) {
       type = type ? type : settings.modules.random_duel.default_type;
+      max_player = type === 'T' ? 4 : 2;
       name = type + ',RANDOM#' + Math.floor(Math.random() * 100000);
       result = new Room(name);
       result.random_type = type;

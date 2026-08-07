@@ -445,7 +445,6 @@ ROOM_find_or_create_random = (type, player_ip)->
       return {"error": "${random_warn_part1}#{bannedplayer.reasons.join('${random_ban_reason_separator}')}${random_warn_part2}"}
     else if bannedplayer.count > 2
       bannedplayer.need_tip = true
-  max_player = if type == 'T' then 4 else 2
   playerbanned = (bannedplayer and bannedplayer.count > 3 and moment_now < bannedplayer.time)
   result = _.find ROOM_all, (room)->
     return room and room.random_type != '' and !room.disconnector and room.duel_stage == ygopro.constants.DUEL_STAGE.BEGIN and !room.windbot and
@@ -453,7 +452,7 @@ ROOM_find_or_create_random = (type, player_ip)->
       (room.random_type == settings.modules.random_duel.default_type or
         settings.modules.random_duel.blank_pass_modes[room.random_type])) or
       room.random_type == type) and
-    room.get_playing_player().length < max_player and
+    room.get_playing_player().length < room.max_player and
     (settings.modules.random_duel.no_rematch_check or room.get_host() == null or
     room.get_host().ip != ROOM_players_oppentlist[player_ip]) and
     (playerbanned == room.deprecated or type == 'T')
@@ -462,6 +461,7 @@ ROOM_find_or_create_random = (type, player_ip)->
     #log.info 'found room', player_name
   else if memory_usage < 90 and not (settings.modules.max_rooms_count and rooms_count >= settings.modules.max_rooms_count)
     type = if type then type else settings.modules.random_duel.default_type
+    max_player = if type == 'T' then 4 else 2
     name = type + ',RANDOM#' + Math.floor(Math.random() * 100000)
     result = new Room(name)
     result.random_type = type
