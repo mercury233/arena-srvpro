@@ -281,6 +281,7 @@ ROOM_all = []
 ROOM_players_oppentlist = {}
 ROOM_players_banned = []
 ROOM_players_scores = {}
+ROOM_private_players_scores = {}
 ROOM_connected_ip = {}
 ROOM_bad_ip = {}
 
@@ -349,30 +350,30 @@ ROOM_kick = (name, callback)->
   )
 
 
-ROOM_player_win = (name)->
-  if !ROOM_players_scores[name]
-    ROOM_players_scores[name]={win:0, lose:0, flee:0, combo:0}
-  ROOM_players_scores[name].win = ROOM_players_scores[name].win + 1
-  ROOM_players_scores[name].combo = ROOM_players_scores[name].combo + 1
+ROOM_player_win = (name, players_scores = ROOM_players_scores)->
+  if !players_scores[name]
+    players_scores[name]={win:0, lose:0, flee:0, combo:0}
+  players_scores[name].win = players_scores[name].win + 1
+  players_scores[name].combo = players_scores[name].combo + 1
   return
 
-ROOM_player_lose = (name)->
-  if !ROOM_players_scores[name]
-    ROOM_players_scores[name]={win:0, lose:0, flee:0, combo:0}
-  ROOM_players_scores[name].lose = ROOM_players_scores[name].lose + 1
-  ROOM_players_scores[name].combo = 0
+ROOM_player_lose = (name, players_scores = ROOM_players_scores)->
+  if !players_scores[name]
+    players_scores[name]={win:0, lose:0, flee:0, combo:0}
+  players_scores[name].lose = players_scores[name].lose + 1
+  players_scores[name].combo = 0
   return
 
-ROOM_player_flee = (name)->
-  if !ROOM_players_scores[name]
-    ROOM_players_scores[name]={win:0, lose:0, flee:0, combo:0}
-  ROOM_players_scores[name].flee = ROOM_players_scores[name].flee + 1
-  ROOM_players_scores[name].combo = 0
+ROOM_player_flee = (name, players_scores = ROOM_players_scores)->
+  if !players_scores[name]
+    players_scores[name]={win:0, lose:0, flee:0, combo:0}
+  players_scores[name].flee = players_scores[name].flee + 1
+  players_scores[name].combo = 0
   return
 
-ROOM_player_get_score = (player)->
+ROOM_player_get_score = (player, players_scores = ROOM_players_scores)->
   name = player.name_vpass
-  score = ROOM_players_scores[name] 
+  score = players_scores[name]
   if !score
     return "#{player.name} ${random_score_blank}"
   total = score.win + score.lose
@@ -385,27 +386,48 @@ ROOM_player_get_score = (player)->
     return "${random_score_part1}#{player.name} ${random_score_part2} #{Math.ceil(score.win/total*100)}${random_score_part3} #{Math.ceil(score.flee/total*100)}${random_score_part4}"
   return
 
-if settings.modules.random_duel.record_match_scores and settings.modules.random_duel.post_match_scores
+ROOM_record_match_scores = (score_array, players_scores)->
+  if score_array.length == 2
+    if score_array[0].score != score_array[1].score
+      if score_array[0].score > score_array[1].score
+        ROOM_player_win(score_array[0].name_vpass, players_scores)
+        ROOM_player_lose(score_array[1].name_vpass, players_scores)
+      else
+        ROOM_player_win(score_array[1].name_vpass, players_scores)
+        ROOM_player_lose(score_array[0].name_vpass, players_scores)
+  if score_array.length == 1 # same name
+    ROOM_player_win(score_array[0].name_vpass, players_scores)
+    ROOM_player_lose(score_array[0].name_vpass, players_scores)
+  return
+
+ROOM_post_scores = (players_scores, score_settings, score_type)->
   setInterval(()->
-    scores_pair = _.pairs ROOM_players_scores
+    scores_pair = _.pairs players_scores
     scores_by_lose = _.sortBy(scores_pair, (score)-> return score[1].lose).reverse() # 败场由高到低
     scores_by_win = _.sortBy(scores_by_lose, (score)-> return score[1].win).reverse() # 然后胜场由低到高，再逆转，就是先排胜场再排败场
-    scores = _.first(scores_by_win, settings.modules.random_duel.post_match_scores_limit)
+    scores = _.first(scores_by_win, score_settings.post_match_scores_limit)
     #log.info scores
-    request.post { url : settings.modules.random_duel.post_match_scores , form : {
-      accesskey: settings.modules.random_duel.post_match_accesskey,
+    request.post { url : score_settings.post_match_scores , form : {
+      accesskey: score_settings.post_match_accesskey,
       rank: JSON.stringify(scores)
     }}, (error, response, body)=>
       if error
-        log.warn 'RANDOM SCORE POST ERROR', error
+        log.warn "#{score_type} SCORE POST ERROR", error
       else
         if response.statusCode != 204 and response.statusCode != 200
-          log.warn 'RANDOM SCORE POST FAIL', response.statusCode, response.statusMessage, body
+          log.warn "#{score_type} SCORE POST FAIL", response.statusCode, response.statusMessage, body
         #else
-        #  log.info 'RANDOM SCORE POST OK', response.statusCode, response.statusMessage
+        #  log.info "#{score_type} SCORE POST OK", response.statusCode, response.statusMessage
       return
     return
   , 60000)
+  return
+
+if settings.modules.random_duel.record_match_scores and settings.modules.random_duel.post_match_scores
+  ROOM_post_scores(ROOM_players_scores, settings.modules.random_duel, 'RANDOM')
+
+if settings.modules.private_duel.record_match_scores and settings.modules.private_duel.post_match_scores
+  ROOM_post_scores(ROOM_private_players_scores, settings.modules.private_duel, 'PRIVATE')
 
 if settings.modules.max_rooms_count
   rooms_count=0
@@ -751,18 +773,30 @@ class Room
         score_form.deck = @decks[name]
       score_array.push score_form
     if settings.modules.random_duel.record_match_scores and @random_type == 'M'
-      if score_array.length == 2
-        if score_array[0].score != score_array[1].score
-          if score_array[0].score > score_array[1].score
-            ROOM_player_win(score_array[0].name_vpass)
-            ROOM_player_lose(score_array[1].name_vpass)
-          else
-            ROOM_player_win(score_array[1].name_vpass)
-            ROOM_player_lose(score_array[0].name_vpass)
-      if score_array.length == 1 # same name
-          #log.info score_array[0].name
-          ROOM_player_win(score_array[0].name_vpass)
-          ROOM_player_lose(score_array[0].name_vpass)
+      ROOM_record_match_scores(score_array, ROOM_players_scores)
+    else if settings.modules.private_duel.record_match_scores and !@random_type and !@windbot and !@kicked
+      if @hostinfo.mode == 2
+        team0 = [@dueling_players?[0], @dueling_players?[1]]
+        team1 = [@dueling_players?[2], @dueling_players?[3]]
+        if _.every(team0.concat(team1), (player)-> player?)
+          team0_fled = _.some team0, (player)=> @scores[player.name_vpass] < 0
+          team1_fled = _.some team1, (player)=> @scores[player.name_vpass] < 0
+          winner_team = null
+          loser_team = null
+          if team0_fled != team1_fled
+            winner_team = if team0_fled then team1 else team0
+            loser_team = if team0_fled then team0 else team1
+          else if !team0_fled
+            team0_score = @scores[team0[0].name_vpass]
+            team1_score = @scores[team1[0].name_vpass]
+            if team0_score != team1_score
+              winner_team = if team0_score > team1_score then team0 else team1
+              loser_team = if team0_score > team1_score then team1 else team0
+          if winner_team
+            ROOM_player_win(player.name_vpass, ROOM_private_players_scores) for player in winner_team
+            ROOM_player_lose(player.name_vpass, ROOM_private_players_scores) for player in loser_team
+      else
+        ROOM_record_match_scores(score_array, ROOM_private_players_scores)
 
     @watcher_buffers = []
     @players = []
@@ -852,6 +886,8 @@ class Room
           ROOM_ban_player(client.name, client.ip, "${random_ban_reason_flee}")
           if settings.modules.random_duel.record_match_scores and @random_type == 'M'
             ROOM_player_flee(client.name_vpass)
+        else if settings.modules.private_duel.record_match_scores and !@random_type and !@windbot
+          ROOM_player_flee(client.name_vpass, ROOM_private_players_scores)
       if @players.length and !(@windbot and client.is_host)
         ygopro.stoc_send_chat_to_room this, "#{client.name} ${left_game}" + if error then ": #{error}" else ''
         #client.room = null
@@ -1244,6 +1280,10 @@ ygopro.stoc_follow 'JOIN_GAME', false, (buffer, info, client, server, datas)->
     ygopro.stoc_send_chat_to_room(room, ROOM_player_get_score(client), ygopro.constants.COLORS.GREEN)
     for player in room.players when player.pos != 7 and player != client
       ygopro.stoc_send_chat(client, ROOM_player_get_score(player), ygopro.constants.COLORS.GREEN)
+  else if settings.modules.private_duel.record_match_scores and !room.random_type and !room.windbot
+    ygopro.stoc_send_chat_to_room(room, ROOM_player_get_score(client, ROOM_private_players_scores), ygopro.constants.COLORS.GREEN)
+    for player in room.players when player.pos != 7 and player != client
+      ygopro.stoc_send_chat(client, ROOM_player_get_score(player, ROOM_private_players_scores), ygopro.constants.COLORS.GREEN)
 
   if settings.modules.enable_halfway_watch and !room.watcher and !room.hostinfo.no_watch
     room.watcher = watcher = net.connect room.port, ->

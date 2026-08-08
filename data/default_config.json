@@ -85,6 +85,12 @@
       "ready_time": 20,
       "hang_timeout": 90
     },
+    "private_duel": {
+      "record_match_scores": false,
+      "post_match_scores": false,
+      "post_match_scores_limit": 10,
+      "post_match_accesskey": "123456"
+    },
     "windbot": {
       "enabled": false,
       "botlist": "./windbot/bots.json",
