@@ -34,6 +34,8 @@
     "permission_examples": {
       "sudo": {
         "get_rooms": true,
+        "get_random_scores": true,
+        "get_private_scores": true,
         "duel_log": true,
         "download_replay": true,
         "clear_duel_log": true,

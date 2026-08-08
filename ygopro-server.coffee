@@ -123,6 +123,8 @@ imported = false
 if settings.modules.http.password
   auth.add_user("olduser", settings.modules.http.password, true, {
         "get_rooms": true,
+        "get_random_scores": true,
+        "get_private_scores": true,
         "shout": true,
         "stop": true,
         "change_settings": true,
@@ -400,12 +402,15 @@ ROOM_record_match_scores = (score_array, players_scores)->
     ROOM_player_lose(score_array[0].name_vpass, players_scores)
   return
 
+ROOM_get_scores = (players_scores, limit)->
+  scores_pair = _.pairs players_scores
+  scores_by_lose = _.sortBy(scores_pair, (score)-> return score[1].lose).reverse() # 败场由高到低
+  scores_by_win = _.sortBy(scores_by_lose, (score)-> return score[1].win).reverse() # 先按胜场、再按败场排序
+  if limit? then _.first(scores_by_win, limit) else scores_by_win
+
 ROOM_post_scores = (players_scores, score_settings, score_type)->
   setInterval(()->
-    scores_pair = _.pairs players_scores
-    scores_by_lose = _.sortBy(scores_pair, (score)-> return score[1].lose).reverse() # 败场由高到低
-    scores_by_win = _.sortBy(scores_by_lose, (score)-> return score[1].win).reverse() # 然后胜场由低到高，再逆转，就是先排胜场再排败场
-    scores = _.first(scores_by_win, score_settings.post_match_scores_limit)
+    scores = ROOM_get_scores(players_scores, score_settings.post_match_scores_limit)
     #log.info scores
     request.post { url : score_settings.post_match_scores , form : {
       accesskey: score_settings.post_match_accesskey,
@@ -1985,6 +1990,43 @@ if settings.modules.http
           response.writeHead(200)
           response.end(addCallback(u.query.callback, JSON.stringify({rooms: roomsjson})))
         )
+
+    else if u.pathname == '/api/getscores'
+      if u.query.limit? and (!_.isString(u.query.limit) or !/^\d+$/.test(u.query.limit))
+        response.writeHead(400, {'Content-Type': 'application/json; charset=utf-8'})
+        response.end(JSON.stringify({error: 'limit must be a non-negative integer'}))
+        return
+      score_type = u.query.type or 'random'
+      players_scores = switch score_type
+        when 'random' then ROOM_players_scores
+        when 'private' then ROOM_private_players_scores
+        else null
+      if !players_scores
+        response.writeHead(400, {'Content-Type': 'application/json; charset=utf-8'})
+        response.end(JSON.stringify({error: 'type must be random or private'}))
+        return
+      score_permission = if score_type == 'random' then 'get_random_scores' else 'get_private_scores'
+      if !await auth.auth(u.query.username, u.query.pass, score_permission, score_permission, true)
+        response.writeHead(403, {'Content-Type': 'application/json; charset=utf-8'})
+        response.end(JSON.stringify({error: 'unauthorized'}))
+        return
+      limit = if u.query.limit? then parseInt(u.query.limit, 10) else null
+      scores = for score_pair in ROOM_get_scores(players_scores, limit)
+        score = score_pair[1]
+        total = score.win + score.lose
+        {
+          name: score_pair[0].split('$', 2)[0]
+          win: score.win
+          lose: score.lose
+          flee: score.flee
+          combo: score.combo
+          total: total
+          winRate: if total then Math.ceil(score.win / total * 100) else 0
+          fleeRate: if total then Math.ceil(score.flee / total * 100) else 0
+        }
+      content_type = if u.query.callback then 'application/javascript; charset=utf-8' else 'application/json; charset=utf-8'
+      response.writeHead(200, {'Content-Type': content_type})
+      response.end(addCallback(u.query.callback, JSON.stringify({type: score_type, scores: scores})))
 
     else if u.pathname == '/api/message'
       #if !pass_validated
