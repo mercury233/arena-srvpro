@@ -52,6 +52,39 @@ for (const [name, declaration] of Object.entries(structsDeclaration)) {
 
 const stoc_follows = {};
 const ctos_follows = {};
+const MAX_PACKETS_PER_READ = 800;
+
+function consumePackets(buffer, callback) {
+  let offset = 0;
+  let packetCount = 0;
+
+  while (buffer.length - offset >= 2) {
+    const messageLength = buffer.readUInt16LE(offset);
+    if (messageLength < 1) {
+      throw new Error("packet length does not include a protocol byte");
+    }
+
+    const packetLength = messageLength + 2;
+    if (buffer.length - offset < packetLength) {
+      break;
+    }
+    if (++packetCount > MAX_PACKETS_PER_READ) {
+      throw new Error("too many packets in one read");
+    }
+
+    const packet = buffer.subarray(offset, offset + packetLength);
+    callback(packet, packet.readUInt8(2));
+    offset += packetLength;
+  }
+
+  if (offset === 0) {
+    return buffer;
+  }
+  if (offset === buffer.length) {
+    return Buffer.alloc(0);
+  }
+  return Buffer.from(buffer.subarray(offset));
+}
 
 function replace_proto(proto, type) {
   if (typeof proto !== "string") {
@@ -153,7 +186,6 @@ function stoc_die(client, msg) {
   }
 
   stoc_send(client, "ERROR_MSG", { msg: 1, code: 9 });
-  client.system_kicked = true;
   client.destroy();
 }
 
@@ -165,6 +197,7 @@ module.exports = {
   structs,
   stoc_follows,
   ctos_follows,
+  consumePackets,
   replace_proto,
   stoc_follow,
   ctos_follow,
