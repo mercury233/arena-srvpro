@@ -1,9 +1,7 @@
-_ = require 'underscore'
-_.str = require 'underscore.string'
-_.mixin(_.str.exports())
+fs = require 'fs'
 
 Struct = require('./struct.js').Struct
-loadJSON = require('load-json-file').sync
+loadJSON = (file) -> JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''))
 
 @i18ns = loadJSON './data/i18n.json'
 
@@ -131,7 +129,7 @@ for name, declaration of structs_declaration
   if !client
     console.log "err stoc_send_chat"
     return
-  for line in _.lines(msg)
+  for line in (if msg? then String(msg).split(/\r\n?|\n/) else [])
     if player>=10
       line="[Server]: "+line
     for o,r of @i18nR[client.lang]
@@ -148,28 +146,6 @@ for name, declaration of structs_declaration
     return
   for client in room.players
     @stoc_send_chat(client, msg, player) if client
-  for client in room.watchers
-    @stoc_send_chat(client, msg, player) if client
-  return
-
-@stoc_send_hint_card_to_room = (room, card)->
-  if !room
-    console.log "err stoc_send_hint_card_to_room"
-    return
-  for client in room.players
-    @stoc_send client, 'GAME_MSG', {
-      curmsg: 2,
-      type: 10,
-      player: 0,
-      data: card
-    } if client
-  for client in room.watchers
-    @stoc_send client, 'GAME_MSG', {
-      curmsg: 2,
-      type: 10,
-      player: 0,
-      data: card
-    } if client
   return
 
 @stoc_die = (client, msg)->
