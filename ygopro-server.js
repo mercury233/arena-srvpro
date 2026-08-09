@@ -11,6 +11,7 @@ const merge = require("deepmerge");
 
 const logger = require("./logger.js");
 const { RoomRegistry } = require("./room-registry.js");
+const { roomNameToHostInfo } = require("./utility.js");
 const log = logger.createLogger({ name: "SRVPro" });
 
 function loadJSON(file) {
@@ -318,7 +319,10 @@ function SERVER_kick(server) {
 
 class Room {
   constructor(name, hostinfo) {
-    this.hostinfo = hostinfo;
+    this.hostinfo = roomNameToHostInfo(
+      name,
+      hostinfo || JSON.parse(JSON.stringify(settings.hostinfo)),
+    );
     this.name = name;
     this.players = [];
     this.established = false;
@@ -327,123 +331,7 @@ class Room {
     this.turn = 0;
     this.lifecycle = "starting";
     this.duel_stage = ygopro.constants.DUEL_STAGE.BEGIN;
-    if (!this.hostinfo) {
-      this.hostinfo = JSON.parse(JSON.stringify(settings.hostinfo));
-    }
-    delete this.hostinfo.comment;
-    let param;
-    if (name.startsWith("M#")) {
-      this.hostinfo.mode = 1;
-    } else if (name.startsWith("T#")) {
-      this.hostinfo.mode = 2;
-      this.hostinfo.start_lp = 16000;
-    } else if (
-      (param = name.match(/^(\d)(\d)(T|F)(T|F)(T|F)(\d+),(\d+),(\d+)/i))
-    ) {
-      this.hostinfo.rule = parseInt(param[1]);
-      this.hostinfo.mode = parseInt(param[2]);
-      if (param[3] === "T") {
-        this.hostinfo.duel_rule = 3;
-      }
-      this.hostinfo.no_check_deck = param[4] === "T";
-      this.hostinfo.no_shuffle_deck = param[5] === "T";
-      this.hostinfo.start_lp = parseInt(param[6]);
-      this.hostinfo.start_hand = parseInt(param[7]);
-      this.hostinfo.draw_count = parseInt(param[8]);
-    } else if ((param = name.match(/(.+)#/)) !== null) {
-      const rule = param[1].toUpperCase();
-      if (rule.match(/(^|，|,)(M|MATCH)(，|,|$)/)) {
-        this.hostinfo.mode = 1;
-      }
-      if (rule.match(/(^|，|,)(T|TAG)(，|,|$)/)) {
-        this.hostinfo.mode = 2;
-        this.hostinfo.start_lp = 16000;
-      }
-      if (rule.match(/(^|，|,)(TCGONLY|TO)(，|,|$)/)) {
-        this.hostinfo.rule = 1;
-      }
-      if (rule.match(/(^|，|,)(OCGONLY|OO)(，|,|$)/)) {
-        this.hostinfo.rule = 0;
-      }
-      if (rule.match(/(^|，|,)(SC|CCG)(，|,|$)/)) {
-        this.hostinfo.rule = 2;
-        this.hostinfo.lflist = -1;
-      }
-      if (rule.match(/(^|，|,)(OT|TCG)(，|,|$)/)) {
-        this.hostinfo.rule = 5;
-      }
-      if ((param = rule.match(/(^|，|,)LP(\d+)(，|,|$)/))) {
-        let start_lp = parseInt(param[2]);
-        if (start_lp <= 0) {
-          start_lp = 1;
-        }
-        if (start_lp >= 99999) {
-          start_lp = 99999;
-        }
-        this.hostinfo.start_lp = start_lp;
-      }
-      if ((param = rule.match(/(^|，|,)(TIME|TM|TI)(\d+)(，|,|$)/))) {
-        let time_limit = parseInt(param[3]);
-        if (time_limit < 0) {
-          time_limit = 180;
-        }
-        if (time_limit >= 1 && time_limit <= 60) {
-          time_limit = time_limit * 60;
-        }
-        if (time_limit >= 999) {
-          time_limit = 999;
-        }
-        this.hostinfo.time_limit = time_limit;
-      }
-      if ((param = rule.match(/(^|，|,)(START|ST)(\d+)(，|,|$)/))) {
-        let start_hand = parseInt(param[3]);
-        if (start_hand <= 0) {
-          start_hand = 1;
-        }
-        if (start_hand >= 40) {
-          start_hand = 40;
-        }
-        this.hostinfo.start_hand = start_hand;
-      }
-      if ((param = rule.match(/(^|，|,)(DRAW|DR)(\d+)(，|,|$)/))) {
-        let draw_count = parseInt(param[3]);
-        if (draw_count >= 35) {
-          draw_count = 35;
-        }
-        this.hostinfo.draw_count = draw_count;
-      }
-      if ((param = rule.match(/(^|，|,)(LFLIST|LF)(\d+)(，|,|$)/))) {
-        const lflist = parseInt(param[3]) - 1;
-        this.hostinfo.lflist = lflist;
-      }
-      if (rule.match(/(^|，|,)(NOLFLIST|NF)(，|,|$)/)) {
-        this.hostinfo.lflist = -1;
-      }
-      if (rule.match(/(^|，|,)(NOUNIQUE|NU)(，|,|$)/)) {
-        this.hostinfo.rule = 4;
-      }
-      if (rule.match(/(^|，|,)(NOCHECK|NC)(，|,|$)/)) {
-        this.hostinfo.no_check_deck = true;
-      }
-      if (rule.match(/(^|，|,)(NOSHUFFLE|NS)(，|,|$)/)) {
-        this.hostinfo.no_shuffle_deck = true;
-      }
-      if (rule.match(/(^|，|,)(IGPRIORITY|PR)(，|,|$)/)) {
-        // deprecated
-        this.hostinfo.duel_rule = 4;
-      }
-      if ((param = rule.match(/(^|，|,)(DUELRULE|MR)(\d+)(，|,|$)/))) {
-        const duel_rule = parseInt(param[3]);
-        if (duel_rule && duel_rule > 0 && duel_rule <= 5) {
-          this.hostinfo.duel_rule = duel_rule;
-        }
-      }
-      if (rule.match(/(^|，|,)(NOWATCH|NW)(，|,|$)/)) {
-        this.hostinfo.no_watch = true;
-      }
-    }
-    this.hostinfo.replay_mode = 0; // 0x1: Save the replays in file. 0x2: Block the replays to observers.
-    param = [
+    const param = [
       0,
       this.hostinfo.lflist,
       this.hostinfo.rule,

@@ -2,22 +2,10 @@
 
 const fs = require("fs");
 const { Struct } = require("./struct.js");
+const { i18ns, i18nR } = require("./utility.js");
 
 const loadJSON = (file) =>
   JSON.parse(fs.readFileSync(file, "utf8").replace(/^\uFEFF/, ""));
-
-const i18ns = loadJSON("./data/i18n.json");
-const i18nR = {};
-
-for (const [lang, translations] of Object.entries(i18ns)) {
-  i18nR[lang] = {};
-  for (const [key, translation] of Object.entries(translations)) {
-    i18nR[lang][key] = {
-      regex: new RegExp(`\\$\\{${key}\\}`, "g"),
-      text: translation,
-    };
-  }
-}
 
 const structsDeclaration = loadJSON("./data/structs.json");
 const typedefs = loadJSON("./data/typedefs.json");

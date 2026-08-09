@@ -1,4 +1,5 @@
 # ignore
+/node_modules
 jsconfig.json
 coffeelint.json
 .vscode/
@@ -17,14 +18,12 @@ index.js
 /decks
 /decks_save*
 /replays
-/node_modules
 /ssl
 /ygosrv233
 /challonge
 /logs
 /plugins
 
-test*
 *.heapsnapshot
 *.tmp
 *.bak
