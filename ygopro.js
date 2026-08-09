@@ -50,16 +50,19 @@ for (const [name, declaration] of Object.entries(structsDeclaration)) {
   structs[name] = result;
 }
 
-const stoc_follows = {};
-const ctos_follows = {};
+const stoc_follows = new Array(256);
+const ctos_follows = new Array(256);
 const MAX_PACKETS_PER_READ = 800;
+const EMPTY_BUFFER = Buffer.alloc(0);
 
-function consumePackets(buffer, callback) {
+function processPackets(buffer, follows, callback) {
   let offset = 0;
+  let forwardingStart = 0;
+  let forwarding = null;
   let packetCount = 0;
 
   while (buffer.length - offset >= 2) {
-    const messageLength = buffer.readUInt16LE(offset);
+    const messageLength = buffer[offset] | (buffer[offset + 1] << 8);
     if (messageLength < 1) {
       throw new Error("packet length does not include a protocol byte");
     }
@@ -72,18 +75,51 @@ function consumePackets(buffer, callback) {
       throw new Error("too many packets in one read");
     }
 
-    const packet = buffer.subarray(offset, offset + packetLength);
-    callback(packet, packet.readUInt8(2));
-    offset += packetLength;
+    const packetEnd = offset + packetLength;
+    const proto = buffer[offset + 2];
+    const follow = follows[proto];
+    if (
+      follow &&
+      callback(buffer.subarray(offset + 3, packetEnd), proto, follow)
+    ) {
+      if (forwardingStart < offset) {
+        const segment = buffer.subarray(forwardingStart, offset);
+        if (forwarding == null) {
+          forwarding = segment;
+        } else if (Buffer.isBuffer(forwarding)) {
+          forwarding = [forwarding, segment];
+        } else {
+          forwarding.push(segment);
+        }
+      }
+      forwardingStart = packetEnd;
+    }
+    offset = packetEnd;
   }
 
-  if (offset === 0) {
-    return buffer;
+  if (forwardingStart < offset) {
+    const segment =
+      forwardingStart === 0 && offset === buffer.length
+        ? buffer
+        : buffer.subarray(forwardingStart, offset);
+    if (forwarding == null) {
+      forwarding = segment;
+    } else if (Buffer.isBuffer(forwarding)) {
+      forwarding = [forwarding, segment];
+    } else {
+      forwarding.push(segment);
+    }
   }
-  if (offset === buffer.length) {
-    return Buffer.alloc(0);
-  }
-  return Buffer.from(buffer.subarray(offset));
+
+  return {
+    forwarding,
+    remaining:
+      offset === 0
+        ? buffer
+        : offset === buffer.length
+          ? EMPTY_BUFFER
+          : Buffer.from(buffer.subarray(offset)),
+  };
 }
 
 function replace_proto(proto, type) {
@@ -197,7 +233,7 @@ module.exports = {
   structs,
   stoc_follows,
   ctos_follows,
-  consumePackets,
+  processPackets,
   replace_proto,
   stoc_follow,
   ctos_follow,

@@ -280,6 +280,16 @@ function getClientRoom(client) {
   return session ? session.room : undefined;
 }
 
+function writeForwarding(socket, forwarding) {
+  if (Buffer.isBuffer(forwarding)) {
+    socket.write(forwarding);
+  } else if (forwarding) {
+    for (const buffer of forwarding) {
+      socket.write(buffer);
+    }
+  }
+}
+
 function CLIENT_kick(client) {
   if (!client) {
     return false;
@@ -622,6 +632,8 @@ class PlayerSession {
     this.preEstablishBuffers = [];
     this.ctosBuffer = Buffer.alloc(0);
     this.stocBuffer = Buffer.alloc(0);
+    this.processCtosHook = this.processCtosHook.bind(this);
+    this.processStocHook = this.processStocHook.bind(this);
     SOCKET_sessions.set(this.client, this);
     SOCKET_sessions.set(this.server, this);
   }
@@ -680,9 +692,7 @@ class PlayerSession {
         this.close();
         return;
       }
-      for (const buffer of this.preEstablishBuffers) {
-        this.server.write(buffer);
-      }
+      writeForwarding(this.server, this.preEstablishBuffers);
       this.established = true;
       this.preEstablishBuffers = [];
     });
@@ -729,40 +739,44 @@ class PlayerSession {
     }
   }
 
+  processCtosHook(buffer, ctosProto, follow) {
+    let info = null;
+    const struct =
+      ygopro.structs[ygopro.proto_structs.CTOS[ygopro.constants.CTOS[ctosProto]]];
+    if (struct) {
+      struct._setBuff(buffer);
+      info = { ...struct.fields };
+    }
+    return (
+      follow.callback(buffer, info, this.client, this.server) &&
+      follow.synchronous
+    );
+  }
+
+  processStocHook(buffer, stocProto, follow) {
+    let info = null;
+    const struct =
+      ygopro.structs[ygopro.proto_structs.STOC[ygopro.constants.STOC[stocProto]]];
+    if (struct) {
+      struct._setBuff(buffer);
+      info = { ...struct.fields };
+    }
+    return (
+      follow.callback(buffer, info, this.client, this.server) &&
+      follow.synchronous
+    );
+  }
+
   handleClientData(data) {
     this.ctosBuffer = this.ctosBuffer.length
       ? Buffer.concat([this.ctosBuffer, data])
       : data;
-    const datas = [];
+    let result;
     try {
-      this.ctosBuffer = ygopro.consumePackets(
+      result = ygopro.processPackets(
         this.ctosBuffer,
-        (packet, ctosProto) => {
-          const follow = ygopro.ctos_follows[ctosProto];
-          let info = null;
-          const buffer = packet.subarray(3);
-          if (follow) {
-            const struct =
-              ygopro.structs[ygopro.proto_structs.CTOS[ygopro.constants.CTOS[ctosProto]]];
-            if (struct) {
-              struct._setBuff(buffer);
-              info = { ...struct.fields };
-            }
-          }
-          const cancel =
-            follow &&
-            follow.callback(
-              buffer,
-              info,
-              this.client,
-              this.server,
-              datas,
-            ) &&
-            follow.synchronous;
-          if (!cancel) {
-            datas.push(packet);
-          }
-        },
+        ygopro.ctos_follows,
+        this.processCtosHook,
       );
     } catch (error) {
       log.warn("bad ctos packet", this.client.ip, error);
@@ -770,12 +784,13 @@ class PlayerSession {
       this.kickClient();
       return;
     }
+    this.ctosBuffer = result.remaining;
     if (this.established) {
-      for (const buffer of datas) {
-        this.server.write(buffer);
-      }
-    } else {
-      this.preEstablishBuffers.push(...datas);
+      writeForwarding(this.server, result.forwarding);
+    } else if (Buffer.isBuffer(result.forwarding)) {
+      this.preEstablishBuffers.push(result.forwarding);
+    } else if (result.forwarding) {
+      this.preEstablishBuffers.push(...result.forwarding);
     }
   }
 
@@ -783,36 +798,12 @@ class PlayerSession {
     this.stocBuffer = this.stocBuffer.length
       ? Buffer.concat([this.stocBuffer, data])
       : data;
-    const datas = [];
+    let result;
     try {
-      this.stocBuffer = ygopro.consumePackets(
+      result = ygopro.processPackets(
         this.stocBuffer,
-        (packet, stocProto) => {
-          const follow = ygopro.stoc_follows[stocProto];
-          let info = null;
-          const buffer = packet.subarray(3);
-          if (follow) {
-            const struct =
-              ygopro.structs[ygopro.proto_structs.STOC[ygopro.constants.STOC[stocProto]]];
-            if (struct) {
-              struct._setBuff(buffer);
-              info = { ...struct.fields };
-            }
-          }
-          const cancel =
-            follow &&
-            follow.callback(
-              buffer,
-              info,
-              this.client,
-              this.server,
-              datas,
-            ) &&
-            follow.synchronous;
-          if (!cancel) {
-            datas.push(packet);
-          }
-        },
+        ygopro.stoc_follows,
+        this.processStocHook,
       );
     } catch (error) {
       log.warn("bad stoc packet", this.client.ip, error);
@@ -820,10 +811,9 @@ class PlayerSession {
       this.server.destroy();
       return;
     }
+    this.stocBuffer = result.remaining;
     if (!this.clientClosed) {
-      for (const buffer of datas) {
-        this.client.write(buffer);
-      }
+      writeForwarding(this.client, result.forwarding);
     }
   }
 
