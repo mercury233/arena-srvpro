@@ -349,6 +349,7 @@ class Room {
     try {
       this.process = spawn("./ygopro", param, {
         cwd: "ygopro",
+        windowsHide: true,
       });
       this.process_pid = this.process.pid;
       this.process.on("error", (err) => {
