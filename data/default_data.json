@@ -1,77 +1,10 @@
 {
-  "badwords": {
-    "file": "./config/badwords.json",
-    "level0": ["滚", "衮", "操", "草", "艹", "狗", "日", "曰", "妈", "娘", "逼"],
-    "level1": ["傻逼", "鸡巴"],
-    "level2": ["死妈", "[操草艹][你尼泥][妈马吗]"],
-    "level3": ["(证件|假证)办理", "出售仿?真(枪|假?钞)"],
-    "level4": ["草泥马"]
-  },
-  "tips": {
-    "file": "./config/tips.json",
-    "tips": [
-      "欢迎来到本服务器",
-      "本服务器使用萌卡代码搭建"
-    ]
-  },
-  "dialogues": {
-    "file": "./config/dialogues.json",
-    "dialogues": {
-      "46986414": [
-        "出来吧，我最强的仆人，黑魔导！"
-      ],
-      "58481572": [
-        "我们来做朋友吧！"
-      ]
-    }
-  },
-  "duel_log": {
-    "file": "./config/duel_log.json",
-    "duel_log": []
-  },
   "users": {
     "file": "./config/admin_user.json",
-    "permission_examples": {
-      "sudo": {
-        "get_rooms": true,
-        "get_random_scores": true,
-        "get_private_scores": true,
-        "duel_log": true,
-        "download_replay": true,
-        "clear_duel_log": true,
-        "deck_dashboard_read": true,
-        "deck_dashboard_write": true,
-        "shout": true,
-        "stop": true,
-        "change_settings": true,
-        "ban_user": true,
-        "kick_user": true,
-        "start_death": true,
-        "pre_dashboard": true,
-        "update_dashboard": true
-      },
-      "judge": {
-        "get_rooms": true,
-        "duel_log": true,
-        "download_replay": true,
-        "deck_dashboard_read": true,
-        "deck_dashboard_write": true,
-        "shout": true,
-        "kick_user": true,
-        "start_death": true
-      },
-      "streamer": {
-        "get_rooms": true,
-        "duel_log": true,
-        "download_replay": true,
-        "deck_dashboard_read": true
-      }
-    },
     "users": {
       "root": {
         "password": "123456",
-        "enabled": false,
-        "permissions": "sudo"
+        "enabled": false
       }
     }
   }

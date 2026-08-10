@@ -45,7 +45,7 @@ function request(port, pathname) {
 }
 
 async function startServer(cwd, httpPort) {
-  const entrypoint = path.resolve(__dirname, "../ygopro-server.js");
+  const entrypoint = path.resolve(__dirname, "../index.js");
   const child = spawn(process.execPath, [entrypoint], {
     cwd,
     stdio: ["ignore", "pipe", "pipe"],

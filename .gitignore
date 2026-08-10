@@ -4,13 +4,6 @@ jsconfig.json
 coffeelint.json
 .vscode/
 
-password.json
-config.*.json
-config.user.bak
-pm2.json
-pre.sh
-index.js
-
 /bak
 /config
 /ygopro
@@ -19,10 +12,7 @@ index.js
 /decks_save*
 /replays
 /ssl
-/ygosrv233
-/challonge
 /logs
-/plugins
 
 *.heapsnapshot
 *.tmp

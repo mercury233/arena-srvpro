@@ -1,10 +1,10 @@
 {
   "file": "./config/config.json",
   "port": 7911,
-  "version": 4930,
+  "version": 4962,
   "hostinfo": {
-    "lflist": 0,
-    "rule": 0,
+    "lflist": -1,
+    "rule": 5,
     "mode": 0,
     "comment": "rule: 0=OCG-ONLY, 1=TCG-ONLY, 2=SC-ONLY, 3=CUSTOM-ONLY, 4=NO-UNIQUE, 5=ALL; mode: 0=SINGLE, 1=MATCH, 2=TAG",
     "duel_rule": 5,
@@ -17,48 +17,20 @@
     "no_watch": false
   },
   "modules": {
-    "welcome": "MyCard YGOPro Server",
+    "welcome": "WindBot Arena YGOPro Server",
     "update": "请更新你的客户端版本",
     "wait_update": "你的客户端版本高于服务器版本，请等待服务器更新",
     "stop": false,
     "full": "服务器已爆满",
     "max_rooms_count": 0,
-    "side_timeout": false,
-    "replay_delay": false,
     "enable_halfway_watch": false,
     "replay_path": "./replays/",
-    "archive_tool": "7z",
     "i18n": {
       "auto_pick": false,
       "default": "zh-cn",
-      "fallback": "en-us",
+      "fallback": "zh-cn",
       "map": {
-        "CN": "zh-cn",
-        "HK": "zh-cn",
-        "MO": "zh-cn",
-        "TW": "zh-cn",
-        "JP": "ja-jp",
-        "AR": "es-es",
-        "BO": "es-es",
-        "CL": "es-es",
-        "CO": "es-es",
-        "CR": "es-es",
-        "CU": "es-es",
-        "EC": "es-es",
-        "SV": "es-es",
-        "ES": "es-es",
-        "GT": "es-es",
-        "GQ": "es-es",
-        "HN": "es-es",
-        "MX": "es-es",
-        "NI": "es-es",
-        "PA": "es-es",
-        "PY": "es-es",
-        "PE": "es-es",
-        "DO": "es-es",
-        "UY": "es-es",
-        "VE": "es-es",
-        "KR": "ko-kr"
+        "CN": "zh-cn"
       }
     },
     "tips": {
@@ -69,108 +41,11 @@
       "enabled": false,
       "get": false
     },
-    "random_duel": {
-      "enabled": false,
-      "default_type": "S",
-      "no_rematch_check": false,
-      "record_match_scores": false,
-      "post_match_scores": false,
-      "post_match_scores_limit": 10,
-      "post_match_accesskey": "123456",
-      "blank_pass_modes": {
-        "S": true,
-        "M": true,
-        "T": false
-      },
-      "ready_time": 20,
-      "hang_timeout": 90
-    },
     "private_duel": {
-      "record_match_scores": false,
+      "record_match_scores": true,
       "post_match_scores": false,
       "post_match_scores_limit": 10,
       "post_match_accesskey": "123456"
-    },
-    "windbot": {
-      "enabled": false,
-      "botlist": "./windbot/bots.json",
-      "spawn": false,
-      "port": 2399,
-      "server_ip": "127.0.0.1",
-      "my_ip": "127.0.0.1"
-    },
-    "deck_log": {
-      "enabled": false,
-      "accesskey": "233",
-      "local": "./deck_log/",
-      "post": "https://api.mycard.moe/ygopro/analytics/deck/text",
-      "arena": "233"
-    },
-    "big_brother": {
-      "enabled": false,
-      "accesskey": "233",
-      "post": "https://api.mycard.moe/ygopro/big-brother"
-    },
-    "test_mode": {
-      "no_connect_count_limit": false,
-      "no_ban_player": false,
-      "surrender_anytime": false
-    },
-    "pre_util": {
-      "enabled": false,
-      "port": 7944,
-      "git_html_path": "../mercury233.github.io/",
-      "html_path": "../mercury233.github.io/ygosrv233/",
-      "html_filename": "pre.html",
-      "git_db_path": "../ygopro-pre-data/",
-      "db_path": "../ygopro-pre-data/unofficial/",
-      "ypk_name": "pre-release.ypk",
-      "html_img_rel_path": "pre/pics/",
-      "html_img_thumbnail": "thumbnail/",
-      "html_img_thumbnail_suffix": "!thumb",
-      "cdn": {
-        "enabled": false,
-        "exe": "upx",
-        "params": [
-          "sync"
-        ],
-        "local": "./ygosrv233",
-        "remote": "/ygosrv233",
-        "script": false,
-        "pics_remote": "/ygopro/"
-      },
-      "ygopro_path": "../ygopro-pre/",
-      "only_show_dbs": {
-        "news.cdb": true,
-        "pre-release.cdb": true
-      },
-      "html_gits": [
-        {
-          "name": "GitHub",
-          "push": [
-            "push",
-            "origin"
-          ]
-        }
-      ]
-    },
-    "update_util": {
-      "enabled": false,
-      "port": 7955,
-      "git_html_path": "../ygo233-web/",
-      "html_path": "../ygo233-web/",
-      "cdb_path": "./ygopro/cards.cdb",
-      "script_path": "./ygopro/script",
-      "changelog_filename": "changelog.json",
-      "html_gits": [
-        {
-          "name": "GitHub",
-          "push": [
-            "push",
-            "origin"
-          ]
-        }
-      ]
     },
     "http": {
       "port": 7922,
@@ -184,11 +59,5 @@
         "key": "ssl/privkey.pem"
       }
     }
-  },
-  "ban": {
-    "banned_user": [],
-    "banned_ip": [],
-    "illegal_id": [],
-    "spam_word": []
   }
 }

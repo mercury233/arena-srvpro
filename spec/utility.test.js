@@ -23,10 +23,12 @@ test("builds the i18n replacement table", () => {
   );
 });
 
-test("converts Match and Tag room prefixes to host info", () => {
+test("converts Single, Match and Tag room prefixes to host info", () => {
+  const single = roomNameToHostInfo("S#arena", createHostInfo());
   const match = roomNameToHostInfo("M#arena", createHostInfo());
   const tag = roomNameToHostInfo("T#arena", createHostInfo());
 
+  assert.equal(single.mode, 0);
   assert.equal(match.mode, 1);
   assert.equal(tag.mode, 2);
   assert.equal(tag.start_lp, 16000);

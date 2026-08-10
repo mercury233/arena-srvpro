@@ -1,102 +1,77 @@
-## SRVPro
-一个YGOPro服务器。
+# Arena SRVPro
 
-现用于[萌卡](https://mycard.moe/)，[YGOPro 233服](https://ygo233.com/)和[YGOPro Koishi服](http://koishi.222diy.gdn/)。
+本项目是供 `windbot-arena` 使用的专用 SRVPro。它不再兼容原版 SRVPro 的完整配置、附加模块或部署方式，但保留基于密码创建 YGOPro 房间的基础能力。
 
-### 支持功能
-* Linux上运行
-* Windows上运行
-* 玩家输入同一房名约战
-* 玩家不指定房间名，自动匹配在线玩家
-* 房间列表json
-* 广播消息
-* 召唤台词
-* 先行卡一键更新
-* WindBot在线AI
-* 萌卡用户登陆
-* 竞赛模式锁定玩家卡组
-* 竞赛模式后台保存录像
-* 竞赛模式自动加时赛系统（规则可调）
-  * 0 正常加时赛规则
-  * 1 YGOCore战队联盟第十二届联赛使用规则
-  * 2 正常加时赛规则 + 1胜规则
-  * 3 2018年7月适用的OCG/TCG加时赛规则
-* 断线重连
+## 房间行为
 
-### 不支持功能
-* 在线聊天室
+- 玩家输入完全相同的非空密码时进入同一个房间；密码不同的玩家不会被自动匹配到一起。
+- `S#...`、`M#...`、`T#...` 分别创建 Single、Match、Tag 房间。
+- 现有的自定义规则前缀继续生效，可通过房名设置卡池、LP、时间、初始手牌等参数。
+- Arena 为每组 Bot 生成唯一的 `M#...` 密码，并通过累计的 `private_duel` 排行统计结果。
 
-### 使用方法
-* 可参考[wiki](https://github.com/moecube/srvpro/wiki)安装
-* 手动安装：
-  * `git clone https://github.com/moecube/srvpro.git`
-  * `cd srvpro`
-  * `npm install`
-  * 安装修改后的YGOPro服务端：https://github.com/moecube/ygopro/tree/server
-* `node ygopro-server.js`即可运行
-* 简易的控制台在 http://srvpro.ygo233.com/dashboard.html 或 http://srvpro-cn.ygo233.com/dashboard.html
-* 使用本项目的Docker镜像: https://hub.docker.com/r/mycard/ygopro-server/
+旧版曾支持把空密码或特定模式密码解释为随机对战请求，并为玩家寻找其他房间。该随机匹配功能已经删除；当前密码只表示一个确定的房间名。
 
-  * 镜像标签
-    * `mycard/ygopro-server:latest`: 完整镜像
-    * `mycard/ygopro-server:lite`: 基本镜像，云录像和人机对战功能需要配合`redis`和`nanahira/windbot`这两个镜像使用。
+## 专用能力
 
-  * 端口
-    * `7911`: YGOPro端口
-    * `7922`: 管理后台端口
+- Linux 和 Windows 运行。
+- 创建和管理 YGOPro 房间，支持 Single、Match 与 Tag。
+- 查询活动房间及轻量房间计数。
+- 查询约战累计排行。
+- 通过管理接口关闭房间或重启服务。
+- 为 Arena 返回稳定的 `serverInstanceId`，便于识别任务运行期间发生的服务重启。
 
-  * 数据卷
-    * `/ygopro-server/config`: SRVPro配置文件数据卷
-    * `/ygopro-server/ygopro/expansions`: YGOPro额外卡片数据卷
-    * `/ygopro-server/decks`: 竞赛模式卡组数据卷
-    * `/ygopro-server/replays`: 竞赛模式录像数据卷
+原版的随机对战、内置 WindBot、竞赛模式、更新工具、牌组日志和其他无关模块不在本项目支持范围内。WindBot 进程由 WindBot Arena 单独管理。
 
-  * 若使用竞赛模式启动服务器，建议把启动命令修改为`pm2-docker start /ygopro-server/data/pm2-docker-tournament.js`。
+## 运行
 
-### 高级功能
-* 待补充说明
-* 简易的先行卡更新控制台在 http://srvpro.ygo233.com/pre-dashboard.html 或 http://srvpro-cn.ygo233.com/pre-dashboard.html
+需要 Node.js 18 或更高版本、项目依赖，以及 server 分支构建的 YGOPro。房间进程应位于 `ygopro/ygopro`；Windows 下使用对应的 `ygopro.exe`。
 
-### 开发计划
-* 重做CTOS和STOC部分
-* 模块化附加功能
-  * 房名代码
-  * 随机对战
-  * 召唤台词
-  * WindBot
-  * 云录像
-  * 比赛模式
-  * 先行卡更新
-* 用户账号系统和管理员账号系统
-* 云录像更换存储方式
+```sh
+npm ci
+npm start
+```
 
-### TODO
-* refactoring CTOS and STOC
-* change features to modules
-  * room name parsing
-  * random duel
-  * summon dialogues
-  * WindBot
-  * cloud replay
-  * tournament mode
-  * expansions updater
-* user and admin account system
-* new database for cloud replay
+服务会读取 `data/default_config.json`，再合并用户配置的 `config/config.json`。首次启动会自动创建 `config/` 并写出合并后的配置。此配置不保证兼容原版或旧版专用部署。
 
-### License
-SRVPro
+管理账号保存在 `config/admin_user.json`。最小配置示例：
 
-Copyright (C) 2013-2018  MoeCube Team
+```json
+{
+  "users": {
+    "arena": {
+      "password": "Arena 中设置的管理密码",
+      "enabled": true
+    }
+  }
+}
+```
 
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU Affero General Public License as
-published by the Free Software Foundation, either version 3 of the
-License, or (at your option) any later version.
+默认端口：
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU Affero General Public License for more details.
+- `7911`：YGOPro 客户端连接端口。
+- `7922`：HTTP 管理端口。
 
-You should have received a copy of the GNU Affero General Public License
-along with this program.  If not, see <https://www.gnu.org/licenses/>.
+Arena 当前使用以下管理接口：
+
+- `GET /api/getrooms`
+- `GET /api/getscores?type=private`
+- `GET /api/message?kick=房间密码`
+- `GET /api/message?reboot=任务标识`
+
+这些请求通过 `username` 和 `pass` 查询参数认证。HTTP 响应同时通过响应头或 JSON 字段返回 `serverInstanceId`。
+
+## Docker
+
+`Dockerfile` 和 `Dockerfile.lite` 都会构建 YGOPro 并直接使用 `node index.js` 启动服务，不再依赖 PM2、Redis 或已删除的竞赛模式启动配置。部署时应持久化 `/ygopro-server/config`；按需持久化 `replays` 和 YGOPro 扩展卡数据。
+
+## 测试
+
+```sh
+npm test
+```
+
+测试不会启动真实对局进程，主要覆盖协议流、房间注册表、房名规则、比分、认证和 HTTP 管理接口。
+
+## License
+
+本项目依据 GNU Affero General Public License v3.0 或更高版本发布，详见 [LICENSE](LICENSE)。
