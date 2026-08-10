@@ -7,7 +7,7 @@
 - 玩家输入完全相同的非空密码时进入同一个房间；密码不同的玩家不会被自动匹配到一起。
 - `S#...`、`M#...`、`T#...` 分别创建 Single、Match、Tag 房间。
 - 现有的自定义规则前缀继续生效，可通过房名设置卡池、LP、时间、初始手牌等参数。
-- Arena 为每组 Bot 生成唯一的 `M#...` 密码，并通过累计的 `private_duel` 排行统计结果。
+- Arena 为每组 Bot 生成唯一的 `M#...` 密码，并通过累计排行统计结果。
 
 旧版曾支持把空密码或特定模式密码解释为随机对战请求，并为玩家寻找其他房间。该随机匹配功能已经删除；当前密码只表示一个确定的房间名。
 
@@ -53,8 +53,9 @@ npm start
 
 Arena 当前使用以下管理接口：
 
+- `GET /api/getroomscount`
 - `GET /api/getrooms`
-- `GET /api/getscores?type=private`
+- `GET /api/getscores`
 - `GET /api/message?kick=房间密码`
 - `GET /api/message?reboot=任务标识`
 

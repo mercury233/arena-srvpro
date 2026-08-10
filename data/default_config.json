@@ -24,6 +24,7 @@
     "full": "服务器已爆满",
     "max_rooms_count": 0,
     "enable_halfway_watch": false,
+    "record_match_scores": true,
     "replay_path": "./replays/",
     "i18n": {
       "auto_pick": false,
@@ -40,12 +41,6 @@
     "dialogues": {
       "enabled": false,
       "get": false
-    },
-    "private_duel": {
-      "record_match_scores": true,
-      "post_match_scores": false,
-      "post_match_scores_limit": 10,
-      "post_match_accesskey": "123456"
     },
     "http": {
       "port": 7922,

@@ -134,6 +134,16 @@ test("HTTP APIs expose a stable server instance ID that changes after restart", 
     countBody.serverInstanceId,
   );
 
+  const scoresResponse = await request(
+    httpPort,
+    "/api/getscores?username=arena&pass=secret",
+  );
+  const scoresBody = JSON.parse(scoresResponse.text);
+  assert.equal(scoresResponse.statusCode, 200);
+  assert.deepEqual(scoresBody.scores, []);
+  assert.equal("type" in scoresBody, false);
+  assert.equal(scoresBody.serverInstanceId, countBody.serverInstanceId);
+
   const messageResponse = await request(
     httpPort,
     "/api/message?kick=missing&username=arena&pass=secret",

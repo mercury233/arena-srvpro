@@ -137,7 +137,7 @@ get_memory_usage();
 setInterval(get_memory_usage, 3000);
 
 const ROOM_all = new RoomRegistry();
-const ROOM_private_players_scores = {};
+const ROOM_players_scores = {};
 const SOCKET_sessions = new WeakMap();
 
 function ROOM_kick(name, callback) {
@@ -425,12 +425,12 @@ class Room {
       });
     }
     if (
-      settings.modules.private_duel.record_match_scores &&
+      settings.modules.record_match_scores &&
       reason !== "admin-kick"
     ) {
       // Arena 不创建 Tag 房，手工 Tag 房的排行榜完整性不在本分支支持范围内。
       if (this.hostinfo.mode !== 2) {
-        ROOM_record_match_scores(score_array, ROOM_private_players_scores);
+        ROOM_record_match_scores(score_array, ROOM_players_scores);
       }
     }
     ROOM_all.delete(this);
@@ -492,8 +492,8 @@ class Room {
     ) {
       this.finished = true;
       this.scores[client.name_vpass] = -9;
-      if (settings.modules.private_duel.record_match_scores) {
-        ROOM_player_flee(client.name_vpass, ROOM_private_players_scores);
+      if (settings.modules.record_match_scores) {
+        ROOM_player_flee(client.name_vpass, ROOM_players_scores);
       }
     }
     if (this.players.length) {
@@ -837,17 +837,17 @@ ygopro.stoc_follow("JOIN_GAME", false, (buffer, info, client) => {
       ygopro.constants.COLORS.GREEN,
     );
   }
-  if (settings.modules.private_duel.record_match_scores) {
+  if (settings.modules.record_match_scores) {
     ygopro.stoc_send_chat_to_room(
       room,
-      ROOM_player_get_score(client, ROOM_private_players_scores),
+      ROOM_player_get_score(client, ROOM_players_scores),
       ygopro.constants.COLORS.GREEN,
     );
     for (const player of room.players) {
       if (player.pos !== 7 && player !== client) {
         ygopro.stoc_send_chat(
           client,
-          ROOM_player_get_score(player, ROOM_private_players_scores),
+          ROOM_player_get_score(player, ROOM_players_scores),
           ygopro.constants.COLORS.GREEN,
         );
       }
@@ -1250,19 +1250,6 @@ if (settings.modules.http) {
         );
         return;
       }
-      const score_type = u.query.type || "private";
-      if (score_type !== "private") {
-        response.writeHead(400, {
-          "Content-Type": "application/json; charset=utf-8",
-        });
-        response.end(
-          JSON.stringify({
-            serverInstanceId: SERVER_INSTANCE_ID,
-            error: "type must be private",
-          }),
-        );
-        return;
-      }
       if (!authenticate(u.query.username, u.query.pass)) {
         response.writeHead(403, {
           "Content-Type": "application/json; charset=utf-8",
@@ -1276,7 +1263,7 @@ if (settings.modules.http) {
         return;
       }
       const limit = u.query.limit != null ? parseInt(u.query.limit, 10) : null;
-      const scores = ROOM_get_scores(ROOM_private_players_scores, limit).map(
+      const scores = ROOM_get_scores(ROOM_players_scores, limit).map(
         (score_pair) => {
           const score = score_pair[1];
           const total = score.win + score.lose;
@@ -1303,7 +1290,6 @@ if (settings.modules.http) {
           u.query.callback,
           JSON.stringify({
             serverInstanceId: SERVER_INSTANCE_ID,
-            type: score_type,
             scores: scores,
           }),
         ),
