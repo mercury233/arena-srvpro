@@ -81,7 +81,20 @@ const payloadDecoders = {
 };
 
 const payloadEncoders = {
-  CTOS: {},
+  CTOS: {
+    PLAYER_INFO(info) {
+      const buffer = Buffer.alloc(PLAYER_NAME_BYTES);
+      writeFixedUtf16LE(buffer, 0, PLAYER_NAME_CODE_UNITS, info.name);
+      return buffer;
+    },
+    JOIN_GAME(info) {
+      const buffer = Buffer.alloc(48);
+      buffer.writeUInt16LE(info.version, 0);
+      buffer.writeUInt32LE(info.gameid || 0, 4);
+      writeFixedUtf16LE(buffer, 8, PLAYER_NAME_CODE_UNITS, info.pass);
+      return buffer;
+    },
+  },
   STOC: {
     ERROR_MSG(info) {
       const buffer = Buffer.alloc(8);
@@ -199,15 +212,20 @@ function decodePayload(type, proto, buffer) {
   return decoder ? decoder(buffer) : null;
 }
 
-function writePlayerName(buffer, name) {
-  requirePayloadLength(buffer, PLAYER_NAME_BYTES, "CTOS_PLAYER_INFO");
-  buffer.fill(0, 0, PLAYER_NAME_BYTES);
+function writeFixedUtf16LE(buffer, offset, codeUnits, value) {
+  const byteLength = codeUnits * 2;
+  buffer.fill(0, offset, offset + byteLength);
   buffer.write(
-    trimUtf16CodeUnits(name, PLAYER_NAME_CODE_UNITS - 1),
-    0,
-    (PLAYER_NAME_CODE_UNITS - 1) * 2,
+    trimUtf16CodeUnits(value, codeUnits - 1),
+    offset,
+    (codeUnits - 1) * 2,
     "utf16le",
   );
+}
+
+function writePlayerName(buffer, name) {
+  requirePayloadLength(buffer, PLAYER_NAME_BYTES, "CTOS_PLAYER_INFO");
+  writeFixedUtf16LE(buffer, 0, PLAYER_NAME_CODE_UNITS, name);
 }
 
 function sendPacket(socket, type, proto, info) {
@@ -263,15 +281,22 @@ function stoc_send_chat(client, msg, player = 8) {
   }
 }
 
-function stoc_send_chat_to_room(room, msg, player = 8) {
+function stoc_send_chat_to_room(room, msg, player = 8, excludedClient) {
   if (!room) {
     console.log("err stoc_send_chat_to_room");
     return;
   }
 
   for (const client of room.players) {
-    if (client) {
+    if (client && !client.destroyed && client !== excludedClient) {
       stoc_send_chat(client, msg, player);
+    }
+  }
+  if (room.observerStream) {
+    for (const client of room.observerStream.watchers) {
+      if (client && !client.destroyed && client !== excludedClient) {
+        stoc_send_chat(client, msg, player);
+      }
     }
   }
 }

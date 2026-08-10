@@ -12,9 +12,12 @@ const merge = require("deepmerge");
 
 const logger = require("./logger.js");
 const { RoomRegistry } = require("./room-registry.js");
+const { RoomObserverStream } = require("./room-observer-stream.js");
 const { roomNameToHostInfo } = require("./utility.js");
 const log = logger.createLogger({ name: "SRVPro" });
 const SERVER_INSTANCE_ID = randomUUID();
+const OBSERVER_MODE_INCLUDE_CHAT = 0x4;
+const ROOM_CLOSE_DRAIN_TIMEOUT_MS = 1000;
 
 function loadJSON(file) {
   return JSON.parse(fs.readFileSync(file, "utf8").replace(/^\uFEFF/, ""));
@@ -333,6 +336,18 @@ class Room {
     this.turn = 0;
     this.lifecycle = "starting";
     this.duel_stage = ygopro.constants.DUEL_STAGE.BEGIN;
+    this.observerStream =
+      settings.modules.enable_halfway_watch && !this.hostinfo.no_watch
+        ? new RoomObserverStream(settings.version, {
+            onError: (error) =>
+              log.warn("ROOM OBSERVER ERROR", this.name, error),
+            onReady: () => this.releaseObserverGate(),
+            onEnd: () => this.observerStreamEnded(),
+          })
+        : null;
+    if (this.observerStream) {
+      this.hostinfo.replay_mode |= OBSERVER_MODE_INCLUDE_CHAT;
+    }
     const param = [
       0,
       this.hostinfo.lflist,
@@ -416,6 +431,93 @@ class Room {
     this.lifecycle = "closing";
     this.close_reason = reason;
     this.close_error = error;
+    this.closeDrainSessions = new Set();
+    if (reason === "server-exit") {
+      this.disconnector = "server";
+      for (const player of this.players) {
+        const session = getSession(player);
+        if (
+          session &&
+          !session.serverClosed &&
+          session.beginRoomDrain(this)
+        ) {
+          this.closeDrainSessions.add(session);
+        }
+      }
+    }
+    this.closeDrainObserver =
+      this.observerStream?.hasPendingDrain() || false;
+    ROOM_all.delete(this);
+    if (
+      this.closeDrainObserver &&
+      reason !== "empty" &&
+      reason !== "server-exit"
+    ) {
+      this.stopProcess();
+    }
+    if (this.closeDrainSessions.size || this.closeDrainObserver) {
+      this.closeDrainTimer = setTimeout(() => {
+        log.warn(
+          "ROOM CLOSE DRAIN TIMEOUT",
+          this.name,
+          `sessions=${this.closeDrainSessions.size}`,
+          `observer=${this.closeDrainObserver}`,
+        );
+        this.finalizeClose();
+      }, ROOM_CLOSE_DRAIN_TIMEOUT_MS);
+      return true;
+    }
+    this.finalizeClose();
+    return true;
+  }
+
+  serverSessionClosed(session) {
+    if (
+      !this.closeDrainSessions ||
+      !this.closeDrainSessions.delete(session)
+    ) {
+      return;
+    }
+    this.finalizeCloseIfDrained();
+  }
+
+  observerStreamEnded() {
+    this.releaseObserverGate();
+    if (!this.closeDrainObserver) {
+      return;
+    }
+    this.closeDrainObserver = false;
+    this.finalizeCloseIfDrained();
+  }
+
+  releaseObserverGate() {
+    for (const player of this.players) {
+      getSession(player)?.releaseObserverGate(this);
+    }
+  }
+
+  finalizeCloseIfDrained() {
+    if (
+      this.lifecycle !== "closing" ||
+      this.closeDrainSessions?.size ||
+      this.closeDrainObserver
+    ) {
+      return false;
+    }
+    return this.finalizeClose();
+  }
+
+  finalizeClose() {
+    if (this.lifecycle !== "closing") {
+      return false;
+    }
+    if (this.closeDrainTimer) {
+      clearTimeout(this.closeDrainTimer);
+      this.closeDrainTimer = null;
+    }
+    const drainingSessions = this.closeDrainSessions;
+    this.closeDrainSessions = null;
+    this.closeDrainObserver = false;
     const score_array = [];
     for (const [name, score] of Object.entries(this.scores)) {
       score_array.push({
@@ -426,39 +528,60 @@ class Room {
     }
     if (
       settings.modules.record_match_scores &&
-      reason !== "admin-kick"
+      this.close_reason !== "admin-kick"
     ) {
       // Arena 不创建 Tag 房，手工 Tag 房的排行榜完整性不在本分支支持范围内。
       if (this.hostinfo.mode !== 2) {
         ROOM_record_match_scores(score_array, ROOM_players_scores);
       }
     }
+    const watchers = this.observerStream ? this.observerStream.close() : [];
     ROOM_all.delete(this);
     const players = this.players;
     this.players = [];
     this.dueling_players = [];
+    const sessions = drainingSessions || new Set();
     for (const player of players) {
       const session = getSession(player);
       if (session) {
-        session.detach(this);
-        session.close();
+        sessions.add(session);
       } else {
         player.destroy();
       }
     }
-    if (
-      this.process &&
-      this.process.exitCode == null &&
-      !this.process.killed
-    ) {
-      try {
-        this.process.kill();
-      } catch (killError) {
-        log.warn("CLOSE ROOM PROCESS ERROR", this.name, killError);
+    for (const session of sessions) {
+      session.detach(this);
+      session.close();
+    }
+    for (const watcher of watchers) {
+      const session = getSession(watcher);
+      if (session) {
+        session.detach(this);
+        session.close();
+      } else {
+        watcher.destroy();
       }
     }
+    this.stopProcess();
     this.lifecycle = "closed";
     return true;
+  }
+
+  stopProcess() {
+    if (
+      !this.process ||
+      this.process.exitCode != null ||
+      this.process.killed
+    ) {
+      return false;
+    }
+    try {
+      this.process.kill();
+      return true;
+    } catch (killError) {
+      log.warn("CLOSE ROOM PROCESS ERROR", this.name, killError);
+      return false;
+    }
   }
 
   connect(client) {
@@ -476,9 +599,39 @@ class Room {
     return true;
   }
 
+  connectWatcher(client) {
+    if (
+      !this.observerStream ||
+      this.lifecycle === "closing" ||
+      this.lifecycle === "closed"
+    ) {
+      return false;
+    }
+    const session = getSession(client);
+    if (!session || !session.attach(this, true)) {
+      return false;
+    }
+    if (!this.observerStream.addWatcher(client)) {
+      session.detach(this);
+      return false;
+    }
+    return true;
+  }
+
   disconnect(client, error) {
     const session = getSession(client);
-    if (session) {
+    if (session && session.postWatcher) {
+      this.observerStream?.removeWatcher(client);
+      session.detach(this);
+      ygopro.stoc_send_chat_to_room(
+        this,
+        `${client.name} \${quit_watch}` + (error ? `: ${error}` : ""),
+      );
+      SERVER_kick(session.server);
+      return;
+    }
+    const drainingServer = this.closeDrainSessions?.has(session);
+    if (session && !drainingServer) {
       session.detach(this);
     }
     const index = this.players.indexOf(client);
@@ -515,12 +668,15 @@ class PlayerSession {
     this.client = client;
     this.server = new net.Socket();
     this.roomId = null;
+    this.drainingRoom = null;
     this.clientClosed = false;
     this.serverClosed = false;
     this.serverSystemKicked = false;
     this.terminated = false;
     this.established = false;
+    this.postWatcher = false;
     this.preEstablishBuffers = [];
+    this.observerGateBuffers = [];
     this.ctosBuffer = Buffer.alloc(0);
     this.stocBuffer = Buffer.alloc(0);
     this.processCtosHook = this.processCtosHook.bind(this);
@@ -530,14 +686,18 @@ class PlayerSession {
   }
 
   get room() {
+    if (this.drainingRoom) {
+      return this.drainingRoom;
+    }
     return this.roomId == null ? undefined : ROOM_all.getById(this.roomId);
   }
 
-  attach(room) {
+  attach(room, postWatcher = false) {
     if (!this.canAttach()) {
       return false;
     }
     this.roomId = room.id;
+    this.postWatcher = postWatcher;
     return true;
   }
 
@@ -545,6 +705,7 @@ class PlayerSession {
     return !(
       this.terminated ||
       this.roomId != null ||
+      this.drainingRoom ||
       this.clientClosed ||
       this.serverClosed ||
       this.client.destroyed ||
@@ -553,9 +714,22 @@ class PlayerSession {
   }
 
   detach(room) {
+    if (this.drainingRoom === room) {
+      this.drainingRoom = null;
+    }
     if (this.roomId === room.id) {
       this.roomId = null;
+      this.postWatcher = false;
     }
+  }
+
+  beginRoomDrain(room) {
+    if (this.roomId !== room.id || this.terminated) {
+      return false;
+    }
+    // The room leaves the active registry before already-queued STOC packets finish draining.
+    this.drainingRoom = room;
+    return true;
   }
 
   start() {
@@ -596,6 +770,7 @@ class PlayerSession {
     this.clientClosed = true;
     this.ctosBuffer = Buffer.alloc(0);
     this.preEstablishBuffers = [];
+    this.observerGateBuffers = [];
     const room = this.room;
     if (room) {
       room.disconnect(this.client, error);
@@ -628,9 +803,15 @@ class PlayerSession {
     if (this.clientClosed) {
       this.release();
     }
+    if (room) {
+      room.serverSessionClosed(this);
+    }
   }
 
   processCtosHook(buffer, ctosProto, follow) {
+    if (this.postWatcher) {
+      return true;
+    }
     const info = ygopro.decodePayload("CTOS", ctosProto, buffer);
     return (
       follow.callback(buffer, info, this.client, this.server) &&
@@ -647,6 +828,9 @@ class PlayerSession {
   }
 
   handleClientData(data) {
+    if (this.postWatcher) {
+      return;
+    }
     this.ctosBuffer = this.ctosBuffer.length
       ? Buffer.concat([this.ctosBuffer, data])
       : data;
@@ -664,6 +848,12 @@ class PlayerSession {
       return;
     }
     this.ctosBuffer = result.remaining;
+    // JOIN_GAME may have converted this session into a halfway watcher.
+    if (this.postWatcher) {
+      this.ctosBuffer = Buffer.alloc(0);
+      this.preEstablishBuffers = [];
+      return;
+    }
     if (this.established) {
       writeForwarding(this.server, result.forwarding);
     } else if (Buffer.isBuffer(result.forwarding)) {
@@ -692,8 +882,27 @@ class PlayerSession {
     }
     this.stocBuffer = result.remaining;
     if (!this.clientClosed) {
-      writeForwarding(this.client, result.forwarding);
+      const room = this.room;
+      if (room?.observerStream?.isJoining()) {
+        if (Buffer.isBuffer(result.forwarding)) {
+          this.observerGateBuffers.push(result.forwarding);
+        } else if (result.forwarding) {
+          this.observerGateBuffers.push(...result.forwarding);
+        }
+      } else {
+        writeForwarding(this.client, result.forwarding);
+      }
     }
+  }
+
+  releaseObserverGate(room) {
+    const buffers = this.observerGateBuffers;
+    this.observerGateBuffers = [];
+    if (!buffers.length || this.room !== room || this.clientClosed) {
+      return false;
+    }
+    writeForwarding(this.client, buffers);
+    return true;
   }
 
   kickClient() {
@@ -721,9 +930,12 @@ class PlayerSession {
     }
     this.terminated = true;
     this.roomId = null;
+    this.drainingRoom = null;
     this.ctosBuffer = Buffer.alloc(0);
     this.stocBuffer = Buffer.alloc(0);
     this.preEstablishBuffers = [];
+    this.observerGateBuffers = [];
+    this.postWatcher = false;
     SOCKET_sessions.delete(this.client);
     SOCKET_sessions.delete(this.server);
   }
@@ -759,11 +971,16 @@ ygopro.ctos_follow("PLAYER_INFO", true, (buffer, info, client) => {
   return false;
 });
 
-ygopro.ctos_follow("JOIN_GAME", false, (buffer, info, client) => {
+ygopro.ctos_follow("JOIN_GAME", true, (buffer, info, client) => {
   info.pass = info.pass.trim();
   client.pass = info.pass;
   if (settings.modules.stop) {
     ygopro.stoc_die(client, settings.modules.stop);
+    return true;
+  } else if (info.pass === "Marshtomp" || info.pass === "the Big Brother") {
+    // These names bypass the normal room password in mycard-ygopro server mode.
+    ygopro.stoc_die(client, "${bad_user_name}");
+    return true;
   } else if (info.version !== settings.version) {
     ygopro.stoc_send_chat(
       client,
@@ -777,37 +994,62 @@ ygopro.ctos_follow("JOIN_GAME", false, (buffer, info, client) => {
       code: settings.version,
     });
     CLIENT_kick(client);
+    return true;
   } else if (!info.pass.length) {
     ygopro.stoc_die(client, "${blank_room_name}");
+    return true;
   } else if (!client.name || client.name === "") {
     ygopro.stoc_die(client, "${bad_user_name}");
+    return true;
   } else if (info.pass.length && !ROOM_validate(info.pass)) {
     ygopro.stoc_die(client, "${invalid_password_room}");
+    return true;
   } else {
     const session = getSession(client);
     if (!session || !session.canAttach()) {
       CLIENT_kick(client);
-      return;
+      return true;
     }
     const room = ROOM_find_or_create_by_name(info.pass);
     if (!room) {
       ygopro.stoc_die(client, settings.modules.full);
+      return true;
     } else if (room.error) {
       ygopro.stoc_die(client, room.error);
+      return true;
     } else if (room.duel_stage !== ygopro.constants.DUEL_STAGE.BEGIN) {
-      ygopro.stoc_die(client, "${watch_denied}");
+      if (!room.connectWatcher(client)) {
+        ygopro.stoc_die(client, "${watch_denied}");
+        return true;
+      }
+      client.setTimeout(300000);
+      ygopro.stoc_send_chat_to_room(
+        room,
+        `${client.name} \${watch_join}`,
+        ygopro.constants.COLORS.LIGHTBLUE,
+        client,
+      );
+      ygopro.stoc_send_chat(
+        client,
+        "${watch_watching}",
+        ygopro.constants.COLORS.BABYBLUE,
+      );
+      return true;
     } else if (
       room.hostinfo.no_watch &&
       room.players.length >= (room.hostinfo.mode === 2 ? 4 : 2)
     ) {
       ygopro.stoc_die(client, "${watch_denied_room}");
+      return true;
     } else {
       client.setTimeout(300000); //连接后超时5分钟
       if (!room.connect(client)) {
         ygopro.stoc_die(client, "${create_room_failed}");
+        return true;
       }
     }
   }
+  return false;
 });
 
 ygopro.stoc_follow("JOIN_GAME", false, (buffer, info, client) => {
@@ -816,6 +1058,9 @@ ygopro.stoc_follow("JOIN_GAME", false, (buffer, info, client) => {
   if (!room) {
     return;
   }
+  // Since the server automatically makes the first player to join the room the host, we can't have the observer join beforehand.
+  // PlayerSession holds every core response until the observer confirms its own JOIN_GAME.
+  room.observerStream?.start(room.port);
   if (settings.modules.welcome) {
     ygopro.stoc_send_chat(
       client,
@@ -1024,7 +1269,9 @@ ygopro.stoc_follow("DUEL_START", false, (buffer, info, client) => {
   }
   if (room.duel_stage === ygopro.constants.DUEL_STAGE.BEGIN) {
     //first start
-    room.lifecycle = "active";
+    if (room.lifecycle !== "closing") {
+      room.lifecycle = "active";
+    }
     room.duel_stage = ygopro.constants.DUEL_STAGE.FINGER;
     room.turn = 0;
     room.dueling_players = [];

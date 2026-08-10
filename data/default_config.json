@@ -23,7 +23,7 @@
     "stop": false,
     "full": "服务器已爆满",
     "max_rooms_count": 0,
-    "enable_halfway_watch": false,
+    "enable_halfway_watch": true,
     "record_match_scores": true,
     "replay_path": "./replays/",
     "i18n": {

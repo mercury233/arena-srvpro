@@ -7,6 +7,7 @@ const {
   ctos_send,
   decodePayload,
   stoc_send,
+  stoc_send_chat_to_room,
   writePlayerName,
 } = require("../ygopro.js");
 
@@ -109,4 +110,54 @@ test("ctos_send frames a raw Buffer payload", () => {
   assert.equal(packet.readUInt16LE(0), payload.length + 1);
   assert.equal(packet.readUInt8(2), 0x01);
   assert.deepEqual(packet.subarray(3), payload);
+});
+
+test("ctos_send encodes the server-mode full-information observer handshake", () => {
+  const playerInfo = capturePacket((socket) =>
+    ctos_send(socket, "PLAYER_INFO", { name: "Marshtomp" }),
+  );
+  const joinGame = capturePacket((socket) =>
+    ctos_send(socket, "JOIN_GAME", {
+      version: 0x1357,
+      pass: "Marshtomp",
+    }),
+  );
+
+  assert.equal(playerInfo.length, 43);
+  assert.deepEqual(decodePayload("CTOS", 0x10, playerInfo.subarray(3)), {
+    name: "Marshtomp",
+  });
+  assert.equal(joinGame.length, 51);
+  assert.deepEqual(joinGame.subarray(5, 7), Buffer.alloc(2));
+  assert.deepEqual(decodePayload("CTOS", 0x12, joinGame.subarray(3)), {
+    version: 0x1357,
+    gameid: 0,
+    pass: "Marshtomp",
+  });
+});
+
+test("room chat reaches halfway watchers and can exclude the joining client", () => {
+  const createClient = () => ({
+    closed: false,
+    lang: "zh-cn",
+    writes: [],
+    write(buffer) {
+      this.writes.push(Buffer.from(buffer));
+    },
+  });
+  const player = createClient();
+  const existingWatcher = createClient();
+  const joiningWatcher = createClient();
+  const room = {
+    players: [player],
+    observerStream: {
+      watchers: new Set([existingWatcher, joiningWatcher]),
+    },
+  };
+
+  stoc_send_chat_to_room(room, "joined", 8, joiningWatcher);
+
+  assert.equal(player.writes.length, 1);
+  assert.equal(existingWatcher.writes.length, 1);
+  assert.equal(joiningWatcher.writes.length, 0);
 });
