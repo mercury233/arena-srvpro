@@ -631,13 +631,7 @@ class PlayerSession {
   }
 
   processCtosHook(buffer, ctosProto, follow) {
-    let info = null;
-    const struct =
-      ygopro.structs[ygopro.proto_structs.CTOS[ygopro.constants.CTOS[ctosProto]]];
-    if (struct) {
-      struct._setBuff(buffer);
-      info = { ...struct.fields };
-    }
+    const info = ygopro.decodePayload("CTOS", ctosProto, buffer);
     return (
       follow.callback(buffer, info, this.client, this.server) &&
       follow.synchronous
@@ -645,13 +639,7 @@ class PlayerSession {
   }
 
   processStocHook(buffer, stocProto, follow) {
-    let info = null;
-    const struct =
-      ygopro.structs[ygopro.proto_structs.STOC[ygopro.constants.STOC[stocProto]]];
-    if (struct) {
-      struct._setBuff(buffer);
-      info = { ...struct.fields };
-    }
+    const info = ygopro.decodePayload("STOC", stocProto, buffer);
     return (
       follow.callback(buffer, info, this.client, this.server) &&
       follow.synchronous
@@ -763,9 +751,7 @@ ygopro.ctos_follow("PLAYER_INFO", true, (buffer, info, client) => {
   if (vpass && !vpass.length) {
     vpass = null;
   }
-  const struct = ygopro.structs.CTOS_PlayerInfo;
-  struct._setBuff(buffer);
-  struct.set("name", name);
+  ygopro.writePlayerName(buffer, name);
   client.name = name;
   client.vpass = vpass;
   client.name_vpass = vpass ? `${name}$${vpass}` : name;
