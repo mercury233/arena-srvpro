@@ -5,6 +5,7 @@ const http = require("http");
 const url = require("url");
 const fs = require("fs");
 const os = require("os");
+const { randomUUID } = require("crypto");
 const { spawn } = require("child_process");
 
 const merge = require("deepmerge");
@@ -13,6 +14,7 @@ const logger = require("./logger.js");
 const { RoomRegistry } = require("./room-registry.js");
 const { roomNameToHostInfo } = require("./utility.js");
 const log = logger.createLogger({ name: "SRVPro" });
+const SERVER_INSTANCE_ID = randomUUID();
 
 function loadJSON(file) {
   return JSON.parse(fs.readFileSync(file, "utf8").replace(/^\uFEFF/, ""));
@@ -1123,14 +1125,53 @@ if (settings.modules.http) {
 
   function requestListener(request, response) {
     const u = url.parse(request.url, true);
-    if (u.pathname === "/api/getrooms") {
+    response.setHeader("X-Server-Instance-ID", SERVER_INSTANCE_ID);
+    if (u.pathname === "/api/getroomscount") {
+      const pass_validated = authenticate(u.query.username, u.query.pass);
+      if (!settings.modules.http.public_roomlist && !pass_validated) {
+        response.writeHead(403, {
+          "Content-Type": "application/json; charset=utf-8",
+        });
+        response.end(
+          JSON.stringify({
+            serverInstanceId: SERVER_INSTANCE_ID,
+            error: "unauthorized",
+          }),
+        );
+        return;
+      }
+      const content_type = u.query.callback
+        ? "application/javascript; charset=utf-8"
+        : "application/json; charset=utf-8";
+      response.writeHead(200, {
+        "Content-Type": content_type,
+      });
+      response.end(
+        addCallback(
+          u.query.callback,
+          JSON.stringify({
+            serverInstanceId: SERVER_INSTANCE_ID,
+            count: ROOM_all.size,
+          }),
+        ),
+      );
+    } else if (u.pathname === "/api/getrooms") {
       const pass_validated = authenticate(u.query.username, u.query.pass);
       if (!settings.modules.http.public_roomlist && !pass_validated) {
         response.writeHead(200);
         response.end(
           addCallback(
             u.query.callback,
-            '{"rooms":[{"roomid":"0","roomname":"密码错误","needpass":"true"}]}',
+            JSON.stringify({
+              serverInstanceId: SERVER_INSTANCE_ID,
+              rooms: [
+                {
+                  roomid: "0",
+                  roomname: "密码错误",
+                  needpass: "true",
+                },
+              ],
+            }),
           ),
         );
       } else {
@@ -1187,6 +1228,7 @@ if (settings.modules.http) {
           addCallback(
             u.query.callback,
             JSON.stringify({
+              serverInstanceId: SERVER_INSTANCE_ID,
               rooms: roomsjson,
             }),
           ),
@@ -1202,6 +1244,7 @@ if (settings.modules.http) {
         });
         response.end(
           JSON.stringify({
+            serverInstanceId: SERVER_INSTANCE_ID,
             error: "limit must be a non-negative integer",
           }),
         );
@@ -1214,6 +1257,7 @@ if (settings.modules.http) {
         });
         response.end(
           JSON.stringify({
+            serverInstanceId: SERVER_INSTANCE_ID,
             error: "type must be private",
           }),
         );
@@ -1225,6 +1269,7 @@ if (settings.modules.http) {
         });
         response.end(
           JSON.stringify({
+            serverInstanceId: SERVER_INSTANCE_ID,
             error: "unauthorized",
           }),
         );
@@ -1257,6 +1302,7 @@ if (settings.modules.http) {
         addCallback(
           u.query.callback,
           JSON.stringify({
+            serverInstanceId: SERVER_INSTANCE_ID,
             type: score_type,
             scores: scores,
           }),
