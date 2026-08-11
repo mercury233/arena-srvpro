@@ -4,6 +4,7 @@ class RoomRegistry {
   constructor() {
     this.byName = new Map();
     this.byId = new Map();
+    this.closing = new Set();
     this.nextId = 1;
   }
 
@@ -28,6 +29,18 @@ class RoomRegistry {
     return true;
   }
 
+  beginClosing(room) {
+    if (!this.delete(room)) {
+      return false;
+    }
+    this.closing.add(room);
+    return true;
+  }
+
+  finishClosing(room) {
+    return this.closing.delete(room);
+  }
+
   getByName(name) {
     return this.byName.get(name);
   }
@@ -41,7 +54,7 @@ class RoomRegistry {
   }
 
   get size() {
-    return this.byId.size;
+    return this.byId.size + this.closing.size;
   }
 }
 

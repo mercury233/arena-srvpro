@@ -39,6 +39,23 @@ test("a stale room cannot remove a replacement with the same name", () => {
   assert.equal(registry.getById(replacement.id), replacement);
 });
 
+test("closing rooms remain in the total count until closing finishes", () => {
+  const registry = new RoomRegistry();
+  const room = { name: "M#123456789" };
+
+  registry.add(room);
+  assert.equal(registry.size, 1);
+
+  assert.equal(registry.beginClosing(room), true);
+  assert.equal(registry.getByName(room.name), undefined);
+  assert.equal(registry.getById(room.id), undefined);
+  assert.deepEqual([...registry.values()], []);
+  assert.equal(registry.size, 1);
+
+  assert.equal(registry.finishClosing(room), true);
+  assert.equal(registry.size, 0);
+});
+
 test("all active rooms can be removed while iterating the registry", () => {
   const registry = new RoomRegistry();
   for (let index = 0; index < 10; index++) {

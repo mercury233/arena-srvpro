@@ -447,7 +447,7 @@ class Room {
     }
     this.closeDrainObserver =
       this.observerStream?.hasPendingDrain() || false;
-    ROOM_all.delete(this);
+    ROOM_all.beginClosing(this);
     if (
       this.closeDrainObserver &&
       reason !== "empty" &&
@@ -536,7 +536,7 @@ class Room {
       }
     }
     const watchers = this.observerStream ? this.observerStream.close() : [];
-    ROOM_all.delete(this);
+    ROOM_all.finishClosing(this);
     const players = this.players;
     this.players = [];
     this.dueling_players = [];
