@@ -1121,7 +1121,16 @@ ygopro.stoc_follow("GAME_MSG", true, (buffer, info, client) => {
       pos = 1 - pos;
     }
     if (pos === 2) {
-      log.warn("DRAW GAME", room.name, `duel=${room.duel_count}`);
+      const playerNames = room.dueling_players
+        .filter(Boolean)
+        .map((player) => player.name)
+        .join(" vs ");
+      log.warn(
+        "DRAW GAME",
+        room.name,
+        `duel=${room.duel_count}`,
+        `players=${playerNames}`,
+      );
     }
     if (pos >= 0 && room.hostinfo.mode === 2) {
       pos = pos * 2;
