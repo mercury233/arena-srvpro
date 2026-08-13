@@ -1,0 +1,21 @@
+{
+  "apps": [
+    {
+      "name": "arena-srvpro",
+      "cwd": ".",
+      "script": "index.js",
+      "interpreter": "node",
+      "instances": 1,
+      "exec_mode": "fork",
+      "autorestart": true,
+      "watch": false,
+      "out_file": "./pm2.logs/arena-srvpro-out.log",
+      "error_file": "./pm2.logs/arena-srvpro-error.log",
+      "merge_logs": true,
+      "log_date_format": "YYYY-MM-DD HH:mm:ss Z",
+      "env": {
+        "NODE_ENV": "production"
+      }
+    }
+  ]
+}
