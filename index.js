@@ -601,6 +601,7 @@ class Room {
 
   connectWatcher(client) {
     if (
+      !settings.modules.enable_halfway_watch ||
       !this.observerStream ||
       this.lifecycle === "closing" ||
       this.lifecycle === "closed"
@@ -1362,7 +1363,46 @@ if (settings.modules.http) {
   function requestListener(request, response) {
     const u = url.parse(request.url, true);
     response.setHeader("X-Server-Instance-ID", SERVER_INSTANCE_ID);
-    if (u.pathname === "/api/getroomscount") {
+    if (u.pathname === "/api/halfwaywatch") {
+      if (!authenticate(u.query.username, u.query.pass)) {
+        response.writeHead(403, {
+          "Content-Type": "application/json; charset=utf-8",
+        });
+        response.end(
+          JSON.stringify({
+            serverInstanceId: SERVER_INSTANCE_ID,
+            error: "unauthorized",
+          }),
+        );
+        return;
+      }
+      if (u.query.enabled !== "true" && u.query.enabled !== "false") {
+        response.writeHead(400, {
+          "Content-Type": "application/json; charset=utf-8",
+        });
+        response.end(
+          JSON.stringify({
+            serverInstanceId: SERVER_INSTANCE_ID,
+            error: "enabled must be true or false",
+          }),
+        );
+        return;
+      }
+      setting_change(
+        settings,
+        "modules:enable_halfway_watch",
+        u.query.enabled === "true",
+      );
+      response.writeHead(200, {
+        "Content-Type": "application/json; charset=utf-8",
+      });
+      response.end(
+        JSON.stringify({
+          serverInstanceId: SERVER_INSTANCE_ID,
+          enableHalfwayWatch: settings.modules.enable_halfway_watch,
+        }),
+      );
+    } else if (u.pathname === "/api/getroomscount") {
       const pass_validated = authenticate(u.query.username, u.query.pass);
       if (!settings.modules.http.public_roomlist && !pass_validated) {
         response.writeHead(403, {
@@ -1465,6 +1505,7 @@ if (settings.modules.http) {
             u.query.callback,
             JSON.stringify({
               serverInstanceId: SERVER_INSTANCE_ID,
+              enableHalfwayWatch: settings.modules.enable_halfway_watch,
               rooms: roomsjson,
             }),
           ),

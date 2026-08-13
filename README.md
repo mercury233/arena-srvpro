@@ -56,6 +56,7 @@ Arena 当前使用以下管理接口：
 - `GET /api/getroomscount`
 - `GET /api/getrooms`
 - `GET /api/getscores`
+- `GET /api/halfwaywatch?enabled=true|false`
 - `GET /api/message?kick=房间密码`
 - `GET /api/message?reboot=任务标识`
 

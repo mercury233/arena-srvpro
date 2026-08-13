@@ -134,6 +134,43 @@ test("HTTP APIs expose a stable server instance ID that changes after restart", 
     countBody.serverInstanceId,
   );
 
+  const disableHalfwayWatchResponse = await request(
+    httpPort,
+    "/api/halfwaywatch?enabled=false&username=arena&pass=secret",
+  );
+  assert.equal(disableHalfwayWatchResponse.statusCode, 200);
+  assert.deepEqual(JSON.parse(disableHalfwayWatchResponse.text), {
+    enableHalfwayWatch: false,
+    serverInstanceId: countBody.serverInstanceId,
+  });
+  assert.equal(
+    JSON.parse(fs.readFileSync(path.join(cwd, "config", "config.json"), "utf8"))
+      .modules.enable_halfway_watch,
+    false,
+  );
+
+  const roomsResponse = await request(
+    httpPort,
+    "/api/getrooms?username=arena&pass=secret",
+  );
+  assert.equal(JSON.parse(roomsResponse.text).enableHalfwayWatch, false);
+
+  const invalidHalfwayWatchResponse = await request(
+    httpPort,
+    "/api/halfwaywatch?enabled=yes&username=arena&pass=secret",
+  );
+  assert.equal(invalidHalfwayWatchResponse.statusCode, 400);
+  assert.equal(
+    JSON.parse(invalidHalfwayWatchResponse.text).error,
+    "enabled must be true or false",
+  );
+
+  const unauthorizedHalfwayWatchResponse = await request(
+    httpPort,
+    "/api/halfwaywatch?enabled=true",
+  );
+  assert.equal(unauthorizedHalfwayWatchResponse.statusCode, 403);
+
   const scoresResponse = await request(
     httpPort,
     "/api/getscores?username=arena&pass=secret",
@@ -172,5 +209,13 @@ test("HTTP APIs expose a stable server instance ID that changes after restart", 
   assert.equal(
     restartedResponse.headers["x-server-instance-id"],
     restartedBody.serverInstanceId,
+  );
+  const restartedRoomsResponse = await request(
+    httpPort,
+    "/api/getrooms?username=arena&pass=secret",
+  );
+  assert.equal(
+    JSON.parse(restartedRoomsResponse.text).enableHalfwayWatch,
+    false,
   );
 });
