@@ -1,4 +1,4 @@
-FROM node:22-bookworm-slim
+FROM node:22-trixie-slim
 
 RUN npm install --global pm2
 
@@ -15,16 +15,15 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /srvpro
-COPY package.json package-lock.json ./
-RUN npm ci --omit=dev && npm cache clean --force
-COPY . .
 
-RUN git clone --branch=server --recursive --depth=1 https://github.com/mycard/ygopro.git && \
-    cd ygopro && \
+RUN git clone --branch=server --recursive --depth=1 https://github.com/mycard/ygopro.git
+
+RUN cd ygopro && \
     wget -O premake5.tar.gz https://github.com/premake/premake-core/releases/download/v5.0.0-beta8/premake-5.0.0-beta8-linux.tar.gz && \
     echo "63edd3e7461eebdd45b500a3c7e8ad4e7a67d68f230010f9a97cbb71b4ec59c8  premake5.tar.gz" | sha256sum -c - && \
     tar xf premake5.tar.gz && \
     rm premake5.tar.gz && \
+    chmod +x ./premake5 && \
     cp -r premake/* . && \
     cp -r resource/* . && \
     ./premake5 gmake --lua-deb && \
@@ -35,6 +34,10 @@ RUN git clone --branch=server --recursive --depth=1 https://github.com/mycard/yg
     ls gframe | sed '/config.h/d' | xargs -I {} rm -rf gframe/{} && \
     cd .. && \
     mkdir -p config replays pm2.logs
+
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev && npm cache clean --force
+COPY . .
 
 EXPOSE 7911 7922
 
