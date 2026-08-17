@@ -155,6 +155,29 @@ test("HTTP APIs expose a stable server instance ID that changes after restart", 
   );
   assert.equal(JSON.parse(roomsResponse.text).enableHalfwayWatch, false);
 
+  const unauthorizedRoomsResponse = await request(
+    httpPort,
+    "/api/getrooms?username=arena&pass=wrong",
+  );
+  assert.equal(unauthorizedRoomsResponse.statusCode, 403);
+  assert.deepEqual(JSON.parse(unauthorizedRoomsResponse.text), {
+    error: "unauthorized",
+    serverInstanceId: countBody.serverInstanceId,
+  });
+
+  const legacyUnauthorizedRoomsResponse = await request(
+    httpPort,
+    "/api/getrooms?username=arena&pass=wrong&callback=receiveRooms",
+  );
+  assert.equal(legacyUnauthorizedRoomsResponse.statusCode, 200);
+  assert.equal(
+    legacyUnauthorizedRoomsResponse.headers["content-type"],
+    "application/javascript; charset=utf-8",
+  );
+  assert.match(legacyUnauthorizedRoomsResponse.text, /^receiveRooms\( /);
+  assert.match(legacyUnauthorizedRoomsResponse.text, /"roomid":"0"/);
+  assert.match(legacyUnauthorizedRoomsResponse.text, /"roomname":"密码错误"/);
+
   const invalidHalfwayWatchResponse = await request(
     httpPort,
     "/api/halfwaywatch?enabled=yes&username=arena&pass=secret",

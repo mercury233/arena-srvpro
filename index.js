@@ -1443,21 +1443,36 @@ if (settings.modules.http) {
     } else if (u.pathname === "/api/getrooms") {
       const pass_validated = authenticate(u.query.username, u.query.pass);
       if (!settings.modules.http.public_roomlist && !pass_validated) {
-        response.writeHead(200);
+        if (u.query.callback) {
+          // backward compatibility for web dashboard
+          response.writeHead(200, {
+            "Content-Type": "application/javascript; charset=utf-8",
+          });
+          response.end(
+            addCallback(
+              u.query.callback,
+              JSON.stringify({
+                serverInstanceId: SERVER_INSTANCE_ID,
+                rooms: [
+                  {
+                    roomid: "0",
+                    roomname: "密码错误",
+                    needpass: "true",
+                  },
+                ],
+              }),
+            ),
+          );
+          return;
+        }
+        response.writeHead(403, {
+          "Content-Type": "application/json; charset=utf-8",
+        });
         response.end(
-          addCallback(
-            u.query.callback,
-            JSON.stringify({
-              serverInstanceId: SERVER_INSTANCE_ID,
-              rooms: [
-                {
-                  roomid: "0",
-                  roomname: "密码错误",
-                  needpass: "true",
-                },
-              ],
-            }),
-          ),
+          JSON.stringify({
+            serverInstanceId: SERVER_INSTANCE_ID,
+            error: "unauthorized",
+          }),
         );
       } else {
         const roomsjson = [];
