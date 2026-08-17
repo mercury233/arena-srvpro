@@ -18,6 +18,7 @@ const log = logger.createLogger({ name: "SRVPro" });
 const SERVER_INSTANCE_ID = randomUUID();
 const OBSERVER_MODE_INCLUDE_CHAT = 0x4;
 const ROOM_CLOSE_DRAIN_TIMEOUT_MS = 1000;
+const ROOM_CREATE_REJECTION_LOG_INTERVAL_MS = 5000;
 
 function loadJSON(file) {
   return JSON.parse(fs.readFileSync(file, "utf8").replace(/^\uFEFF/, ""));
@@ -117,6 +118,7 @@ const ygopro = require("./ygopro.js");
 
 // 获取可用内存
 let memory_usage = 0;
+let roomCreateRejection = null;
 
 function get_memory_usage() {
   const total_memory = os.totalmem();
@@ -248,15 +250,49 @@ function ROOM_find_or_create_by_name(name) {
   const room = ROOM_find_by_name(name);
   if (room) {
     return room;
-  } else if (
-    memory_usage >= 90 ||
-    (settings.modules.max_rooms_count &&
-      ROOM_all.size >= settings.modules.max_rooms_count)
-  ) {
-    return null;
-  } else {
-    return new Room(name);
   }
+
+  const memoryLimitReached = memory_usage >= 90;
+  const roomLimitReached = Boolean(
+    settings.modules.max_rooms_count &&
+    ROOM_all.size >= settings.modules.max_rooms_count,
+  );
+  if (memoryLimitReached || roomLimitReached) {
+    const reason = memoryLimitReached ? "memory-limit" : "room-limit";
+    const now = Date.now();
+    if (!roomCreateRejection || roomCreateRejection.reason !== reason) {
+      roomCreateRejection = { count: 0, lastLoggedAt: 0, reason };
+    }
+    roomCreateRejection.count++;
+    if (
+      now - roomCreateRejection.lastLoggedAt >=
+      ROOM_CREATE_REJECTION_LOG_INTERVAL_MS
+    ) {
+      log.warn(
+        "CREATE ROOM REJECTED",
+        name,
+        `reason=${reason}`,
+        `memory=${memory_usage.toFixed(1)}%`,
+        `rooms=${ROOM_all.size}`,
+        `maxRooms=${settings.modules.max_rooms_count || "unlimited"}`,
+        `rejectedInBurst=${roomCreateRejection.count}`,
+      );
+      roomCreateRejection.lastLoggedAt = now;
+    }
+    return null;
+  }
+
+  if (roomCreateRejection) {
+    log.info(
+      "CREATE ROOM REJECTION CLEARED",
+      `reason=${roomCreateRejection.reason}`,
+      `rejectedInBurst=${roomCreateRejection.count}`,
+      `memory=${memory_usage.toFixed(1)}%`,
+      `rooms=${ROOM_all.size}`,
+    );
+    roomCreateRejection = null;
+  }
+  return new Room(name);
 }
 
 function ROOM_find_by_name(name) {
