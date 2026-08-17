@@ -19,6 +19,7 @@ config.user.bak
 /ygosrv233
 /challonge
 /logs
+/pm2.logs
 /plugins
 
 test*

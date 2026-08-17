@@ -64,7 +64,7 @@ Arena 当前使用以下管理接口：
 
 ## Docker
 
-`Dockerfile` 和 `Dockerfile.lite` 都会构建 YGOPro 并直接使用 `node index.js` 启动服务，不再依赖 PM2、Redis 或已删除的竞赛模式启动配置。部署时应持久化 `/ygopro-server/config`；按需持久化 `replays` 和 YGOPro 扩展卡数据。
+`Dockerfile` 会从源码构建 YGOPro，并通过 PM2 启动 `index.js`，使 Arena 调用重启接口后服务进程能被自动拉起。部署时应持久化 `/srvpro/config`；按需持久化 `replays` 和 YGOPro 扩展卡数据。
 
 ## 测试
 

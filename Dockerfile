@@ -1,45 +1,41 @@
-# Dockerfile for SRVPro
-FROM node:12-buster-slim
+FROM node:22-bookworm-slim
 
-RUN npm install -g pm2
+RUN npm install --global pm2
 
-# apt
-RUN apt update && \
-    env DEBIAN_FRONTEND=noninteractive apt install -y wget git build-essential libevent-dev libsqlite3-dev mono-complete p7zip-full redis-server python3 liblua5.3-dev && \
+RUN apt-get update && \
+    env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        build-essential \
+        ca-certificates \
+        git \
+        libevent-dev \
+        liblua5.4-dev \
+        liblzma-dev \
+        libsqlite3-dev \
+        wget && \
     rm -rf /var/lib/apt/lists/*
 
-# srvpro
-COPY . /ygopro-server
-WORKDIR /ygopro-server
-RUN npm ci && \
-    mkdir config decks replays logs /redis
+WORKDIR /srvpro
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev && npm cache clean --force
+COPY . .
 
-# ygopro
-RUN git clone --branch=server --recursive --depth=1 https://github.com/moecube/ygopro && \
+RUN git clone --branch=server --recursive --depth=1 https://github.com/mycard/ygopro.git && \
     cd ygopro && \
-    git submodule foreach git checkout master && \
-    wget -O - https://github.com/premake/premake-core/releases/download/v5.0.0-alpha14/premake-5.0.0-alpha14-linux.tar.gz | tar zfx - && \
-    ./premake5 gmake && \
-    cd build && \
-    make config=release -j$(nproc) && \
-    cd .. && \
+    wget -O premake5.tar.gz https://github.com/premake/premake-core/releases/download/v5.0.0-beta8/premake-5.0.0-beta8-linux.tar.gz && \
+    echo "63edd3e7461eebdd45b500a3c7e8ad4e7a67d68f230010f9a97cbb71b4ec59c8  premake5.tar.gz" | sha256sum -c - && \
+    tar xf premake5.tar.gz && \
+    rm premake5.tar.gz && \
+    cp -r premake/* . && \
+    cp -r resource/* . && \
+    ./premake5 gmake --lua-deb && \
+    make -C build config=release -j$(nproc) && \
     mv ./bin/release/ygopro . && \
-    strip ygopro && \
     mkdir replay expansions && \
     rm -rf .git* bin obj build ocgcore cmake lua premake* sound textures .travis.yml *.txt appveyor.yml LICENSE README.md *.lua strings.conf system.conf && \
-    ls gframe | sed '/game.cpp/d' | xargs -I {} rm -rf gframe/{}
+    ls gframe | sed '/config.h/d' | xargs -I {} rm -rf gframe/{} && \
+    cd .. && \
+    mkdir -p config replays pm2.logs
 
-# windbot
-RUN git clone --depth=1 https://github.com/moecube/windbot /tmp/windbot && \
-    cd /tmp/windbot && \
-    xbuild /property:Configuration=Release /property:TargetFrameworkVersion="v4.5" && \
-    mv /tmp/windbot/bin/Release /ygopro-server/windbot && \
-    cp -rf /ygopro-server/ygopro/cards.cdb /ygopro-server/windbot/ && \
-    rm -rf /tmp/windbot
+EXPOSE 7911 7922
 
-# infos
-WORKDIR /ygopro-server
-EXPOSE 7911 7922 7933
-# VOLUME [ /ygopro-server/config, /ygopro-server/decks, /ygopro-server/replays, /redis ]
-
-CMD [ "pm2-docker", "start", "/ygopro-server/data/pm2-docker.json" ]
+CMD ["pm2-runtime", "start", "pm2.json"]
