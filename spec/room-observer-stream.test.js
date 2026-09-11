@@ -228,7 +228,7 @@ test("observer stream releases startup when observer closes before joining", () 
   assert.equal(stream.hasPendingDrain(), false);
 });
 
-test("observer stream waits for all watcher queues after a clean observer close", () => {
+test("observer stream finishes without ending watcher connections after DUEL_END", () => {
   const observer = new FakeSocket();
   const errors = [];
   let endCount = 0;
@@ -252,24 +252,30 @@ test("observer stream waits for all watcher queues after a clean observer close"
   observer.emit("data", joinPacket);
   assert.equal(stream.addWatcher(fastWatcher), true);
   assert.equal(stream.addWatcher(slowWatcher), true);
-  const tail = Buffer.from([9, 8, 7]);
-  observer.emit("data", tail);
+  const packets = new FakeSocket();
+  stoc_send(packets, "DUEL_END");
+  const tail = packets.writes[0];
+  observer.emit("data", tail.subarray(0, 2));
+  assert.equal(stream.duelEnded, false);
+  observer.emit("data", tail.subarray(2));
+  assert.equal(stream.duelEnded, true);
+  assert.equal(stream.packetBuffer.length, 0);
   observer.destroyed = true;
   observer.closed = true;
   observer.emit("close");
 
   assert.deepEqual(errors, []);
-  assert.equal(endCount, 0);
-  assert.equal(stream.hasPendingDrain(), true);
-  assert.equal(fastWatcher.endCalled, true);
-  assert.equal(slowWatcher.endCalled, true);
+  assert.equal(endCount, 1);
+  assert.equal(stream.hasPendingDrain(), false);
+  assert.equal(fastWatcher.endCalled, false);
+  assert.equal(slowWatcher.endCalled, false);
   assert.equal(slowWatcher.destroyed, false);
   slowWatcher.finish();
   assert.equal(endCount, 1);
   assert.equal(stream.hasPendingDrain(), false);
   assert.equal(slowWatcher.destroyed, false);
-  assert.deepEqual(fastWatcher.writes, [joinPacket, tail]);
-  assert.deepEqual(slowWatcher.writes, [joinPacket, tail]);
+  assert.deepEqual(Buffer.concat(fastWatcher.writes), Buffer.concat([joinPacket, tail]));
+  assert.deepEqual(Buffer.concat(slowWatcher.writes), Buffer.concat([joinPacket, tail]));
   assert.equal(stream.addWatcher(new FakeSocket()), false);
   assert.deepEqual(stream.close(), [fastWatcher, slowWatcher]);
   assert.equal(slowWatcher.destroyed, false);

@@ -6,10 +6,11 @@ const ygopro = require("./ygopro.js");
 
 const MARSHTOMP_NAME = "Marshtomp";
 const OBSERVER_JOIN_TIMEOUT_MS = 1000;
-const OBSERVER_HANDSHAKE_FOLLOWS = [];
-OBSERVER_HANDSHAKE_FOLLOWS[
-  ygopro.replace_proto("JOIN_GAME", "STOC")
-] = true;
+const JOIN_GAME = Number(ygopro.replace_proto("JOIN_GAME", "STOC"));
+const DUEL_END = Number(ygopro.replace_proto("DUEL_END", "STOC"));
+const OBSERVER_FOLLOWS = [];
+OBSERVER_FOLLOWS[JOIN_GAME] = true;
+OBSERVER_FOLLOWS[DUEL_END] = true;
 
 class RoomObserverStream {
   constructor(version, options = {}) {
@@ -25,7 +26,7 @@ class RoomObserverStream {
     this.buffers = [];
     this.watchers = new Set();
     this.observer = null;
-    this.joinBuffer = Buffer.alloc(0);
+    this.packetBuffer = Buffer.alloc(0);
     this.joinTimer = null;
     this.started = false;
     this.ready = false;
@@ -33,7 +34,7 @@ class RoomObserverStream {
     this.observerEnded = false;
     this.ended = false;
     this.closed = false;
-    this.watcherDrainHandlers = new Map();
+    this.duelEnded = false;
   }
 
   start(port) {
@@ -79,9 +80,7 @@ class RoomObserverStream {
           watcher.write(buffer);
         }
       }
-      if (!this.ready) {
-        this.readHandshake(buffer);
-      }
+      this.readPackets(buffer);
     });
     observer.on("error", (error) => {
       this.fail(error);
@@ -93,7 +92,7 @@ class RoomObserverStream {
           return;
         }
         this.observerEnded = true;
-        this.drainWatchers();
+        this.finish();
       }
     });
     if (this.joinTimeoutMs > 0) {
@@ -149,30 +148,33 @@ class RoomObserverStream {
     );
   }
 
-  readHandshake(buffer) {
-    this.joinBuffer = this.joinBuffer.length
-      ? Buffer.concat([this.joinBuffer, buffer])
+  readPackets(buffer) {
+    this.packetBuffer = this.packetBuffer.length
+      ? Buffer.concat([this.packetBuffer, buffer])
       : buffer;
     let joined = false;
     try {
       const result = ygopro.processPackets(
-        this.joinBuffer,
-        OBSERVER_HANDSHAKE_FOLLOWS,
-        () => {
-          joined = true;
+        this.packetBuffer,
+        OBSERVER_FOLLOWS,
+        (payload, proto) => {
+          if (proto === JOIN_GAME) {
+            joined = true;
+          } else if (proto === DUEL_END) {
+            this.duelEnded = true;
+          }
           return false;
         },
       );
-      this.joinBuffer = result.remaining;
+      this.packetBuffer = result.remaining;
     } catch (error) {
       this.fail(new Error("invalid room observer response", { cause: error }));
       return false;
     }
-    if (!joined) {
+    if (!joined || this.ready) {
       return false;
     }
     this.ready = true;
-    this.joinBuffer = Buffer.alloc(0);
     this.clearJoinTimer();
     this.onReady();
     return true;
@@ -186,35 +188,7 @@ class RoomObserverStream {
     this.joinTimer = null;
   }
 
-  drainWatchers() {
-    const pending = [];
-    for (const watcher of this.watchers) {
-      if (watcher.destroyed || watcher.writableFinished) {
-        continue;
-      }
-      const done = () => {
-        watcher.off("finish", done);
-        watcher.off("close", done);
-        this.watcherDrainHandlers.delete(watcher);
-        if (!this.watcherDrainHandlers.size) {
-          this.finishDrain();
-        }
-      };
-      this.watcherDrainHandlers.set(watcher, done);
-      watcher.once("finish", done);
-      watcher.once("close", done);
-      pending.push(watcher);
-    }
-    if (!pending.length) {
-      this.finishDrain();
-      return;
-    }
-    for (const watcher of pending) {
-      watcher.end();
-    }
-  }
-
-  finishDrain() {
+  finish() {
     if (this.failed || this.ended || this.closed) {
       return false;
     }
@@ -229,7 +203,7 @@ class RoomObserverStream {
     }
     this.failed = true;
     this.clearJoinTimer();
-    this.joinBuffer = Buffer.alloc(0);
+    this.packetBuffer = Buffer.alloc(0);
     this.buffers = [];
     this.onError(error);
     for (const watcher of this.watchers) {
@@ -250,12 +224,7 @@ class RoomObserverStream {
     }
     this.closed = true;
     this.clearJoinTimer();
-    this.joinBuffer = Buffer.alloc(0);
-    for (const [watcher, done] of this.watcherDrainHandlers) {
-      watcher.off("finish", done);
-      watcher.off("close", done);
-    }
-    this.watcherDrainHandlers.clear();
+    this.packetBuffer = Buffer.alloc(0);
     const watchers = Array.from(this.watchers);
     this.watchers.clear();
     this.buffers = [];

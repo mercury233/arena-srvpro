@@ -571,6 +571,12 @@ class Room {
         ROOM_record_match_scores(score_array, ROOM_players_scores);
       }
     }
+    const keepWatchers =
+      (this.close_reason === "empty" || this.close_reason === "server-exit") &&
+      this.observerStream?.ended &&
+      this.observerStream.duelEnded &&
+      !this.observerStream.failed &&
+      !this.observerStream.packetBuffer.length;
     const watchers = this.observerStream ? this.observerStream.close() : [];
     ROOM_all.finishClosing(this);
     const players = this.players;
@@ -593,7 +599,15 @@ class Room {
       const session = getSession(watcher);
       if (session) {
         session.detach(this);
-        session.close();
+        if (keepWatchers && !session.clientClosed && !watcher.destroyed) {
+          // TCP finish is not playback completion; let the client consume DUEL_END and leave.
+          session.playbackPending = true;
+          watcher.setTimeout(0);
+          watcher.setKeepAlive(true, 30000);
+          session.kickServer();
+        } else {
+          session.close();
+        }
       } else {
         watcher.destroy();
       }
@@ -712,6 +726,7 @@ class PlayerSession {
     this.terminated = false;
     this.established = false;
     this.postWatcher = false;
+    this.playbackPending = false;
     this.preEstablishBuffers = [];
     this.observerGateBuffers = [];
     this.ctosBuffer = Buffer.alloc(0);
@@ -829,7 +844,7 @@ class PlayerSession {
     if (room && !this.serverSystemKicked) {
       room.disconnector = "server";
     }
-    if (!this.clientClosed) {
+    if (!this.clientClosed && !this.playbackPending) {
       ygopro.stoc_send_chat(
         this.client,
         error ? `\${server_error}: ${error}` : "${server_closed}",
@@ -865,7 +880,7 @@ class PlayerSession {
   }
 
   handleClientData(data) {
-    if (this.postWatcher) {
+    if (this.postWatcher || this.playbackPending) {
       return;
     }
     this.ctosBuffer = this.ctosBuffer.length
